@@ -1,4 +1,4 @@
-# EEGDojo  
+# EEGDojo🥋  
 **Your Personal EEG Processing Toolkit**
 
 ![EEGDojo Cover](cover.png)
@@ -62,4 +62,6 @@ We welcome contributions to EEGDojo! Whether it's fixing a bug, adding new featu
 
 ## License 📄
 This project is licensed under the MIT License.
+
+Enjoy EEG processing like a ninja in the EEG dojo! 🥋
 
