@@ -17,13 +17,13 @@ function EEG = reref(EEG, varargin)
         excludeLabels = R.excludeLabels;
     end
 
-    if ~isempty(R.logFile)
-        log_msg = '--- Re-referencing data to average';
-        if ~isempty(excludeLabels)
-            log_msg = [log_msg, sprintf(', excluding channels: %s', strjoin(excludeLabels, ', '))];
-        end
-        logPrint(R.logFile, [log_msg, ' ---']);
+
+    log_msg = '--- Re-referencing data to average';
+    if ~isempty(excludeLabels)
+        log_msg = [log_msg, sprintf(', excluding channels: %s', strjoin(excludeLabels, ', '))];
     end
+    logPrint(R.logFile, [log_msg, ' ---']);
+
 
     if isempty(excludeLabels)
         EEG = pop_reref(EEG, []);
@@ -35,7 +35,6 @@ function EEG = reref(EEG, varargin)
 
     EEG = eeg_checkset(EEG);
 
-    if ~isempty(R.logFile)
-        logPrint(R.logFile, 'Re-referencing complete.');
-    end
+    logPrint(R.logFile, 'Re-referencing complete.');
+
 end

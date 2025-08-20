@@ -38,13 +38,12 @@ function test_pipeline()
         % --- Build and Run Pipeline ---
         fprintf('--- Building and Running Pipeline ---\n');
         p = EEGdojo.Params(params);
-        pipe = EEGdojo.Pipeline(EEG, p, fullfile(p.outputpath, 'pipeline_test.log'));
-
-        pipe = pipe.addStep(@EEGdojo.preprocess.remove_channels, 'labels', p.chan2remove);
-        pipe = pipe.addStep(@EEGdojo.preprocess.downsample, 'freq', p.DownsamplingRate);
-        pipe = pipe.addStep(@EEGdojo.preprocess.filter, 'HPfreq', p.HPfreq, 'LPfreq', p.LPfreq);
-        pipe = pipe.addStep(@EEGdojo.preprocess.remove_powerline, 'Freq', p.PowerLineFrequency);
-        pipe = pipe.addStep(@EEGdojo.preprocess.reref);
+        pipe = EEGdojo.Pipeline(EEG, p);
+        pipe = pipe.addStep(@prep.remove_channels, 'labels', p.chan2remove);
+        pipe = pipe.addStep(@prep.downsample, 'freq', p.DownsamplingRate);
+        pipe = pipe.addStep(@prep.filter, 'HPfreq', p.HPfreq, 'LPfreq', p.LPfreq);
+        pipe = pipe.addStep(@prep.remove_powerline, 'Freq', p.PowerLineFrequency);
+        pipe = pipe.addStep(@prep.reref);
 
         pipe = pipe.run();
         fprintf('Pipeline finished successfully.\n\n');
