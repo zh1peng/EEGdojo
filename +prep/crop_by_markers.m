@@ -8,7 +8,6 @@ function EEG = crop_by_markers(EEG, varargin)
     addRequired(p, 'EndMarker', @ischar);
     addParameter(p, 'PadSec', 0, @isnumeric);
     addParameter(p, 'logFile', '', @ischar);
-    addParameter(p, 'error_logFile', '', @ischar);
     parse(p, EEG, varargin{:});
 
     
@@ -30,16 +29,14 @@ function EEG = crop_by_markers(EEG, varargin)
 
     start_idx = find(strcmp(evtype, StartMarker), 1, 'first');
     if isempty(start_idx)
-        logPrint(R.error_logFile, sprintf('Start marker "%s" not found.', StartMarker));
-        return;
+        error('Start marker "%s" not found.', StartMarker);
     end
 
     lat_all   = [EEG.event.latency];
     end_all   = find(strcmp(evtype, EndMarker));
     end_after = end_all(lat_all(end_all) > lat_all(start_idx));
     if isempty(end_after)
-        logPrint(R.error_logFile, sprintf('End marker "%s" not found.', EndMarker));
-        return;
+        error('End marker "%s" not found.', EndMarker);
     end
     end_idx = end_after(end);
 
@@ -55,7 +52,6 @@ function EEG = crop_by_markers(EEG, varargin)
         EEG = eeg_checkset(EEG);
         logPrint(R.logFile, sprintf('Segmenting data from %s to %s.', EEG.event(start_idx).label, EEG.event(end_idx).label));
     catch ME 
-        logPrint(R.error_logFile, 'Segmentation failed: %s.',ME.message);
-        return;
+        error('Segmentation failed: %s.',ME.message);
     end
 end

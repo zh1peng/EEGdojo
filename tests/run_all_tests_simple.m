@@ -41,7 +41,7 @@ function run_all_tests_simple()
 
         % Test downsample
         disp('Testing EEGdojo.preprocess.downsample...');
-        EEG_ds = EEGdojo.preprocess.downsample(EEG, 'freq', 125);
+        EEG_ds = prep.downsample(EEG, 'freq', -125);
         assert(EEG_ds.srate == 125, 'downsample failed: incorrect srate.');
         disp('OK');
 

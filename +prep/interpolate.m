@@ -5,15 +5,14 @@ function EEG = interpolate(EEG, varargin)
     p = inputParser;
     addRequired(p, 'EEG', @isstruct);
     addParameter(p, 'logFile', '', @ischar);
+    addParameter(p, 'error_logFile', '', @ischar);
     parse(p, EEG, varargin{:});
 
     R = p.Results;
     EEG = R.EEG;
 
     if ~isfield(EEG, 'urchanlocs') || isempty(EEG.urchanlocs)
-        if ~isempty(R.logFile)
-            logPrint(R.logFile, '--- Skipping interpolation: No original channel locations found. ---');
-        end
+        logPrint(R.error_logFile, '--- Skipping interpolation: No original channel locations found. ---');
         return;
     end
 
@@ -22,20 +21,13 @@ function EEG = interpolate(EEG, varargin)
     chans_to_interp = setdiff(original_chans, current_chans);
 
     if isempty(chans_to_interp)
-        if ~isempty(R.logFile)
-            logPrint(R.logFile, '--- Skipping interpolation: No channels to interpolate. ---');
-        end
-        return;
+       logPrint(R.logFile, '--- Skipping interpolation: No channels to interpolate. ---');
+       return;
     end
 
-    if ~isempty(R.logFile)
-        logPrint(R.logFile, sprintf('--- Interpolating %d channels: %s ---', numel(chans_to_interp), strjoin(chans_to_interp, ', ')));
-    end
-
+    logPrint(R.logFile, sprintf('--- Interpolating %d channels: %s ---', numel(chans_to_interp), strjoin(chans_to_interp, ', ')));
     EEG = pop_interp(EEG, EEG.urchanlocs, 'spherical');
     EEG = eeg_checkset(EEG);
+    logPrint(R.logFile, 'Interpolation complete.');
 
-    if ~isempty(R.logFile)
-        logPrint(R.logFile, 'Interpolation complete.');
-    end
 end

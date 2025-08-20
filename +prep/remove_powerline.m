@@ -19,7 +19,6 @@ function EEG = remove_powerline(EEG, varargin)
     p.addParameter('BW',   2,  @(x) isnumeric(x) && isscalar(x) && x>0);
     p.addParameter('NHarm',3,  @(x) isnumeric(x) && isscalar(x) && x>=1);
     p.addParameter('logFile', '', @ischar);
-    p.addParameter('error_logFile', '', @ischar');
     p.parse(EEG, varargin{:});
     R = p.Results;
 
@@ -33,9 +32,7 @@ function EEG = remove_powerline(EEG, varargin)
     harm = (1:R.NHarm) * R.Freq;
     harm = harm(harm < nyq);
     if isempty(harm)
-        logPrint(R.error_logFile,'[remove_line_noise] No harmonics < Nyquist. Skipping.\n'); 
-        EEG = eeg_checkset(EEG);
-        return;
+        error('[remove_line_noise] No harmonics < Nyquist. \n'); 
     end
 
     switch lower(R.Method)
@@ -49,8 +46,7 @@ function EEG = remove_powerline(EEG, varargin)
                 EEG = eeg_checkset(EEG);
                 logPrint(R.logFile, '--- CleanLine complete ---');
             catch ME
-                logPrint(R.error_logFile, '[remove_line_noise] Error using CleanLine: %s\n', ME.message);
-                return;
+                error('[remove_line_noise] Error using CleanLine: %s\n', ME.message);
             end
 
         case 'notch'
@@ -71,10 +67,8 @@ function EEG = remove_powerline(EEG, varargin)
                 end
                 logPrint(R.logFile, '--- FIR notch complete ---');
             catch ME
-                logPrint(R.error_logFile, '[remove_line_noise] Error using FIR notch: %s\n', ME.message);
-                return;
-            end
-            
+                error('[remove_line_noise] Error using FIR notch: %s\n', ME.message);
+            end      
     end
     logPrint(R.logFile, '--- Powerline noise removal complete ---');
 end

@@ -6,7 +6,6 @@ function EEG = downsample(EEG, varargin)
     addRequired(p, 'EEG', @isstruct);
     addParameter(p, 'freq', 250, @isnumeric);
     addParameter(p, 'logFile', '', @ischar);
-    addParameter(p, 'error_logFile', '', @ischar);
     parse(p, EEG, varargin{:});
 
     
@@ -18,7 +17,6 @@ function EEG = downsample(EEG, varargin)
         EEG = eeg_checkset(EEG);
         logPrint(R.logFile, sprintf('Downsampling complete. New sampling rate: %d Hz.', EEG.srate));
     catch ME 
-        logPrint(R.error_logFile, 'Downsampling failed: %s.',ME.message);
-        return;
+        error('Downsampling failed: %s', ME.message);
     end
 end

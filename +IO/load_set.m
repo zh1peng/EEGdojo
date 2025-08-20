@@ -6,21 +6,19 @@ function [EEG, out] = load_set(~, varargin)
 %
     p = inputParser;
     p.addParameter('filename','',@ischar);
-    p.addParameter('filepath','',@ischar);
-    p.addParameter('logFile', '', @ischar);
-    p.addParameter('error_logFile', '', @ischar);
+    p.addRequired(p,'filepath','',@ischar);
+    p.addRequired(p,'logFile', '', @ischar);
     p.parse(varargin{:});
 
     R = p.Results;
-    logPrint(R.logFile, sprintf('--- Loading dataset: %s ---', R.filename));
+    logPrint(R.logFile, sprintf('--- Loading dataset: %s/%s ---', R.filepath, R.filename));
     try
         EEG = pop_loadset('filename', R.filename, 'filepath', R.filepath);
         EEG = eeg_checkset(EEG);
         out = struct('loadedFile', fullfile(R.filepath, R.filename));
-        logPrint(R.logFile, '--- Dataset loaded ---');
+        logPrint(R.logFile, sprintf('--- Dataset loaded %s/%s ---', R.filepath, R.filename));
     catch ME
-        logPrint(R.error_logFile, '[load_set] Error loading dataset: %s', ME.message)
-        return;
+       error('[load_set] Error loading dataset: %s', ME.message)
     end
 
     

@@ -5,19 +5,19 @@ function [EEG, out] = save_set(EEG, varargin)
 %   [EEG, out] = eegdojo.io.save_set(EEG, 'filename','x.set','filepath','./out')
 %
     p = inputParser;
-    p.addParameter('filename','',@ischar);
-    p.addParameter('filepath','',@ischar);
+    p.addRequired(p,'EEG',@isstruct);
+    p.addRequired(p,'filename','',@ischar);
+    p.addRequired(p,'filepath','',@ischar);
     p.addParameter('logFile', '', @ischar);
-    p.addParameter('error_logFile', '', @ischar);
     p.parse(varargin{:});
     R = p.Results;
-    logPrint(R.logFile, sprintf('--- Saving dataset: %s ---', R.filename));
+     sprintf('--- Saving dataset: %s/%s ---',R.filepath, R.filename);
     try
         pop_saveset(EEG, 'filename', R.filename, 'filepath', R.filepath);
         out = struct('savedFile', fullfile(R.filepath, R.filename));
+    logPrint(R.logFile, sprintf('--- Dataset saved: %s/%s ---', R.filepath, R.filename));
     catch ME
-        logPrint(R.error_logFile, '[save_set] Error saving dataset: %s', ME.message)
-        return;
+        error('[save_set] Error saving dataset: %s', ME.message)
     end
     
 end
