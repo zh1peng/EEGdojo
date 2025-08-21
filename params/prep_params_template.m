@@ -62,7 +62,7 @@ params.BadIC.ICAtype = 'runica';
 params.BadIC.ICLabelOn = 'on';
 params.BadIC.FASTEROn = 'on';
 params.BadIC.ICLabelThreshold = [NaN NaN; 0.8 1; 0.8 1; 0.8 1; 0.8 1; 0.8 1; NaN NaN];
-params.BadIC.Nrun = 2;
+params.BadIC.Nrun = 1;
 
 % Bad point detection parameters (clean_rawdata)
 params.BadPoint.on = "on";
