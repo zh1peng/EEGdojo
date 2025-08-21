@@ -1,64 +1,86 @@
 function [EEG, out] = crop_by_markers(EEG, varargin)
 % CROP_BY_MARKERS Crops EEG data based on specified start and end markers.
+%   This function extracts a segment of EEG data between two defined event
+%   markers. An optional padding can be added before the start marker and
+%   after the end marker. This is useful for isolating specific experimental
+%   phases or continuous segments of interest.
 %
-% This function extracts a segment of EEG data between two defined event
-% markers. An optional padding can be added before the start marker and
-% after the end marker. This is useful for isolating specific experimental
-% phases or continuous segments of interest.
+% Syntax:
+%   [EEG, out] = prep.crop_by_markers(EEG, 'param', value, ...)
 %
-% Inputs:
+% Input Arguments:
 %   EEG         - EEGLAB EEG structure.
-%   varargin    - Optional parameters:
-%     'StartMarker' - (char) The type/label of the event marker indicating
-%                     the start of the segment. Default is ''.
-%     'EndMarker'   - (char) The type/label of the event marker indicating
-%                     the end of the segment. Default is ''.
-%     'PadSec'      - (numeric) Number of seconds to pad the segment on
-%                     both sides. Default is 0.
-%     'LogFile'     - (char) Path to the log file for recording processing
-%                     information. Default is ''.
 %
-% Outputs:
+% Optional Parameters (Name-Value Pairs):
+%   'StartMarker' - (char | string, default: '')
+%                   The type/label of the event marker indicating the start
+%                   of the segment.
+%   'EndMarker'   - (char | string, default: '')
+%                   The type/label of the event marker indicating the end
+%                   of the segment.
+%   'PadSec'      - (numeric, default: 0)
+%                   Number of seconds to pad the segment on both sides.
+%                   The padding is added before the start marker and after
+%                   the end marker.
+%   'LogFile'     - (char | string, default: '')
+%                   Path to a log file for verbose output. If empty, output
+%                   is directed to the command window.
+%
+% Output Arguments:
 %   EEG         - Modified EEGLAB EEG structure containing the cropped data.
 %   out         - Structure containing output information:
-%     .start_sample - (numeric) The starting sample of the cropped segment.
-%     .end_sample   - (numeric) The ending sample of the cropped segment.
+%                 out.start_sample - (numeric) The starting sample of the
+%                                    cropped segment.
+%                 out.end_sample   - (numeric) The ending sample of the
+%                                    cropped segment.
 %
 % Examples:
-%   % 1. Crop data between markers 'start_exp' and 'end_exp' with 1 second padding:
-%   EEG = crop_by_markers(EEG, 'StartMarker', 'start_exp', 'EndMarker', 'end_exp', 'PadSec', 1);
+%   % Example 1: Crop data between markers 'start_exp' and 'end_exp' with 1 second padding (without pipeline)
+%   % Load an EEG dataset first, e.g., EEG = pop_loadset('eeg_data.set');
+%   EEG_cropped = prep.crop_by_markers(EEG, ...
+%       'StartMarker', 'start_exp', ...
+%       'EndMarker', 'end_exp', ...
+%       'PadSec', 1);
+%   disp('Data cropped between "start_exp" and "end_exp" with 1s padding.');
 %
-%   % 2. Usage within a pipeline:
-%   %    (Assuming 'p' is a parameter structure containing 'p.logFile')
+%   % Example 2: Usage within a pipeline
+%   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.crop_by_markers, ...
 %       'StartMarker', 'ExperimentStart', ...
 %       'EndMarker', 'ExperimentEnd', ...
 %       'PadSec', 0.5, ...
-%       'LogFile', p.logFile);
+%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
+%   disp('Data cropped via pipeline.');
 %
 % See also: pop_select, eeg_checkset
 
     % ----------------- Parse inputs -----------------
     p = inputParser;
     p.addRequired('EEG', @isstruct);
-    p.addParameter('StartMarker', '', @ischar);
-    p.addParameter('EndMarker', '', @ischar);
+    p.addParameter('StartMarker', '', @(s) ischar(s) || isstring(s)); % Allow string type
+    p.addParameter('EndMarker', '', @(s) ischar(s) || isstring(s));   % Allow string type
     p.addParameter('PadSec', 0, @isnumeric);
-    p.addParameter('LogFile', '', @ischar);
+    p.addParameter('LogFile', '', @(s) ischar(s) || isstring(s));
 
     p.parse(EEG, varargin{:});
     R = p.Results;
 
-    % Extract parameters for clarity
-    StartMarker = R.StartMarker;
-    EndMarker = R.EndMarker;
+    % Extract parameters for clarity and ensure char type for comparison
+    StartMarker = char(R.StartMarker);
+    EndMarker = char(R.EndMarker);
     PadTime = R.PadSec;
     LogFile = R.LogFile;
-    
+
     out = struct(); % Initialize output structure
 
-    logPrint(LogFile, sprintf('[crop_by_markers] Cropping EEG data between markers "%s" and "%s".', StartMarker, EndMarker));
-    
+
+    if isempty(StartMarker) || isempty(EndMarker)
+        error('[crop_by_markers] Both StartMarker and EndMarker must be specified.');
+    end
+
+    logPrint(LogFile, sprintf('[crop_by_markers] Cropping EEG data between markers "%s" and "%s" with %.2f seconds padding.', StartMarker, EndMarker, PadTime));
+
     % Ensure event types are consistent (char)
     evtype = {EEG.event.type};
     for i = 1:numel(evtype)
@@ -84,26 +106,23 @@ function [EEG, out] = crop_by_markers(EEG, varargin)
     end
     end_idx = end_after(end); % Use the last occurrence after the start marker
 
-    try
-        % Calculate start and end samples for cropping
-        start_samp = EEG.event(start_idx).latency;
-        end_samp   = EEG.event(end_idx).latency;
 
-        pad_samp  = round(max(0, PadTime) * EEG.srate); % Convert padding seconds to samples
-        seg_start = max(1, start_samp - pad_samp);     % Ensure start is not before 1
-        seg_end   = min(EEG.pnts, end_samp + pad_samp); % Ensure end is not after total points
+    % Calculate start and end samples for cropping
+    start_samp = EEG.event(start_idx).latency;
+    end_samp   = EEG.event(end_idx).latency;
 
-        % Perform the cropping
-        EEG = pop_select(EEG, 'point', [seg_start, seg_end]);
-        EEG = eeg_checkset(EEG); % Update EEG structure after changes
+    pad_samp  = round(max(0, PadTime) * EEG.srate); % Convert padding seconds to samples
+    seg_start = max(1, start_samp - pad_samp);     % Ensure start is not before 1
+    seg_end   = min(EEG.pnts, end_samp + pad_samp); % Ensure end is not after total points
 
-        logPrint(LogFile, sprintf('[crop_by_markers] Data successfully cropped from sample %d to %d.', seg_start, seg_end));
-        
-        % Store output information
-        out.start_sample = seg_start;
-        out.end_sample = seg_end;
+    % Perform the cropping
+    EEG = pop_select(EEG, 'point', [seg_start, seg_end]);
+    EEG = eeg_checkset(EEG); % Update EEG structure after changes
 
-    catch ME
-        error('[crop_by_markers] Cropping failed: %s', ME.message);
-    end
+    logPrint(LogFile, sprintf('[crop_by_markers] Data successfully cropped from sample %d to %d.', seg_start, seg_end));
+    
+    % Store output information
+    out.start_sample = seg_start;
+    out.end_sample = seg_end;
+
 end

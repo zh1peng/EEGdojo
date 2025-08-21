@@ -19,8 +19,7 @@ function logPrint(logFile, msg)
         fclose(logFID);
     else
         % Optional: warn once that logging failed
-        warning('logPrint:FileNotOpened', ...
-            'Could not open log file: %s. Only printed to console.', logFile);
+        sprintf('[Warning] Could not open log file: %s. Only printed to console.', logFile);
     end
 end
 

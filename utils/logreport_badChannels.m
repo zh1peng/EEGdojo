@@ -1,4 +1,4 @@
-function logreport_badChannels(BadChan, logFile)
+function logreport_badchannels(BadChan, logFile)
     % LOGREPORT_BADCHANNELS - Logs and summarizes bad channels detected by each module.
     %
     % Inputs:
@@ -12,7 +12,7 @@ function logreport_badChannels(BadChan, logFile)
     % Try to open log file
     fid = fopen(logFile, 'a');
     if fid == -1
-        warning('Unable to open log file: %s. Printing to terminal instead.', logFile);
+        sprintf('[Warning] Unable to open log file: %s. Printing to terminal instead.', logFile);
         fid = 1; % stdout (MATLAB command window)
     end
 

@@ -56,34 +56,31 @@ function [EEG, out] = reref(EEG, varargin)
     out = struct(); % Initialize out struct
     out.excluded_labels = R.excludeLabels;
 
-    try
-        if ischar(R.excludeLabels)
-            excludeLabels = {R.excludeLabels};
-        else
-            excludeLabels = R.excludeLabels;
-        end
 
-        log_msg = '[reref] Re-referencing data to average';
-        if ~isempty(excludeLabels)
-            log_msg = [log_msg, sprintf(', excluding channels: %s', strjoin(excludeLabels, ', '))];
-        end
-        logPrint(R.LogFile, [log_msg, '.']);
-
-        if isempty(excludeLabels)
-            logPrint(R.LogFile, '[reref] Applying average reference to all channels.');
-            EEG = pop_reref(EEG, []);
-        else
-            labels = {EEG.chanlocs.labels};
-            excludeIdx = find(ismember(labels, excludeLabels));
-            logPrint(R.LogFile, sprintf('[reref] Applying average reference, excluding %d channels.', length(excludeIdx)));
-            EEG = pop_reref(EEG, [], 'exclude', excludeIdx);
-        end
-
-        EEG = eeg_checkset(EEG);
-
-        logPrint(R.LogFile, '[reref] Re-referencing complete.');
-
-    catch ME
-        error('[reref] Re-referencing failed: %s', ME.message);
+    if ischar(R.excludeLabels)
+        excludeLabels = {R.excludeLabels};
+    else
+        excludeLabels = R.excludeLabels;
     end
+
+    log_msg = '[reref] Re-referencing data to average';
+    if ~isempty(excludeLabels)
+        log_msg = [log_msg, sprintf(', excluding channels: %s', strjoin(excludeLabels, ', '))];
+    end
+    logPrint(R.LogFile, [log_msg, '.']);
+
+    if isempty(excludeLabels)
+        logPrint(R.LogFile, '[reref] Applying average reference to all channels.');
+        EEG = pop_reref(EEG, []);
+    else
+        labels = {EEG.chanlocs.labels};
+        excludeIdx = find(ismember(labels, excludeLabels));
+        logPrint(R.LogFile, sprintf('[reref] Applying average reference, excluding %d channels.', length(excludeIdx)));
+        EEG = pop_reref(EEG, [], 'exclude', excludeIdx);
+    end
+
+    EEG = eeg_checkset(EEG);
+
+    logPrint(R.LogFile, '[reref] Re-referencing complete.');
+
 end

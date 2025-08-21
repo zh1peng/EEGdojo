@@ -5,19 +5,18 @@ function [EEG, out] = save_set(EEG, varargin)
 %   [EEG, out] = eegdojo.io.save_set(EEG, 'filename','x.set','filepath','./out')
 %
     p = inputParser;
-    p.addRequired(p,'EEG',@isstruct);
-    p.addRequired(p,'filename','',@ischar);
-    p.addRequired(p,'filepath','',@ischar);
+    % EEG is already the first input argument, no need to add it to inputParser
+    p.addParameter('filename','',@ischar); % Changed from addRequired
+    p.addParameter('filepath','',@ischar); % Changed from addRequired
     p.addParameter('logFile', '', @ischar);
     p.parse(varargin{:});
     R = p.Results;
-     sprintf('--- Saving dataset: %s/%s ---',R.filepath, R.filename);
-    try
-        pop_saveset(EEG, 'filename', R.filename, 'filepath', R.filepath);
-        out = struct('savedFile', fullfile(R.filepath, R.filename));
-    logPrint(R.logFile, sprintf('--- Dataset saved: %s/%s ---', R.filepath, R.filename));
-    catch ME
-        error('[save_set] Error saving dataset: %s', ME.message)
-    end
+
+    logPrint(R.logFile, sprintf('[save_set] --- Saving dataset: %s/%s ---', R.filepath, R.filename)); % Added logPrint and prefix
+
+    pop_saveset(EEG, 'filename', R.filename, 'filepath', R.filepath);
+    out = struct('savedFile', fullfile(R.filepath, R.filename));
+    logPrint(R.logFile, sprintf('[save_set] --- Dataset saved: %s/%s ---', R.filepath, R.filename)); % Added prefix
+
     
 end

@@ -48,12 +48,13 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 %                             Enable FASTER component property analysis for IC rejection.
 %   'EOGChanLabels'         - (cell array of strings, default: {})
 %                             Cell array of channel labels corresponding to EOG
-%                             channels (e.g., {'VEOG', 'HEOG'}). Used by FASTER.
+%                             channels (e.g., {'VEOG', 'HEOG'}). These labels are used to identify EOG channels for FASTER analysis. If empty, FASTER EOG detection will be skipped.
 %
 %   %% ECG Correlation Detection Parameters
 %   'DetectECG'             - (logical, default: true)
-%                             Enable ECG correlation-based IC rejection. Requires
-%                             at least one channel of type 'ECG' in EEG.chanlocs.
+%                             Enable ECG correlation-based IC rejection.
+%   'ECG_EEG_Struct'        - (struct, default: [])
+%                             A separate EEGLAB EEG structure containing only the ECG channel data. This is used for correlating IC activations with ECG. If not provided, ECG detection will be skipped.
 %   'ECGCorrelationThreshold'- (numeric, default: 0.8)
 %                             Absolute correlation threshold for ECG detection.
 %                             ICs with correlation above this value are marked bad.
@@ -76,16 +77,25 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 %   disp('Total bad ICs removed:');
 %   disp(ic_info.BadICs.all);
 %
-%   % Example 2: Remove bad ICs using ECG correlation (with pipeline)
-%   % Assuming 'pipe' is an initialized pipeline object and EEG has an 'ECG' channel.
-%   pipe = pipe.addStep(@prep.remove_bad_ICs, ...
-%       'DetectECG', true, 'ECGCorrelationThreshold', 0.75, ...
-%       'ICLabelOn', false, 'FASTEROn', false, ... %% Disable other detectors
-%       'RunIdx', 2, ... %% Second ICA run
-%       'LogPath', 'C:\temp\eeg_logs', 'LogFile', 'ecg_ics_report');
-%   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
-%   % The removed ICs will be reflected in EEG_processed.icaweights and EEG.icasphere
-%
+% Example 2 — Remove bad ICs using ECG correlation (with pipeline)
+% Assumes:
+%   - 'pipe' is an initialized pipeline object
+%   - 'ecg_eeg_data' is an EEG struct containing only the ECG channel(s)
+% pipe = pipe.addStep(@prep.remove_bad_ICs, ...
+%     'DetectECG', true, ...
+%     'ECGCorrelationThreshold', 0.75, ...
+%     'ECG_EEG_Struct', ecg_eeg_data, ...      % pass separate ECG EEG struct
+%     'ICLabelOn', false, ...                  % disable ICLabel
+%     'FASTEROn', false, ...                   % disable FASTER
+%     'RunIdx', 2, ...                         % use the 2nd ICA run
+%     'LogPath', 'C:\temp\eeg_logs', ...
+%     'LogFile', 'ecg_ics_report');
+% Run the pipeline
+% [EEG_processed, results] = pipe.run(EEG);
+
+% Notes:
+% - Removed ICs are reflected in EEG_processed.icaweights and EEG_processed.icasphere.
+% - 'results' (if implemented) may include indices of removed ICs and QC metrics.
 % See also: pop_iclabel, pop_icflag, component_properties, pop_eegfiltnew, pop_runica, pop_subcomp, eeg_getica, draw_selectcomps
 
     % --------- Parse inputs ----------
@@ -113,6 +123,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
     % ECG detection parameters
     p.addParameter('DetectECG', true, @islogical);
     p.addParameter('ECGCorrelationThreshold', 0.8, @(x) isnumeric(x) && isscalar(x) && x > 0 && x <= 1);
+    p.addParameter('ECG_Struct', [], @(x) isstruct(x) || isempty(x)); % New parameter for separate ECG EEG structure
 
     p.parse(EEG, varargin{:});
     R = p.Results;
@@ -121,19 +132,35 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
     BadICs = struct('IClabel', [], 'FASTER', [], 'ECG', [], 'all', []);
     icaLabel = sprintf('ICA%d', R.RunIdx);
 
-    if ~exist(R.LogPath, 'dir'), mkdir(R.LogPath); end
+    if ~exist(R.LogPath, 'dir')& ~isempty(R.LogPath), mkdir(R.LogPath); end
 
-    try
+
         if ~R.ICLabelOn && ~R.FASTEROn && ~R.DetectECG
             error('[remove_bad_ICs] At least one detection method (ICLabel, FASTER, or DetectECG) must be enabled.');
         end
 
-        EOGChan = chans2idx(EEG, R.EOGChanLabels, false);
+        % Find EOG channels based on provided labels
+        EOGChan = [];
+        if ~isempty(R.EOGChanLabels)
+            for i = 1:length(R.EOGChanLabels)
+                idx = find(strcmp({EEG.chanlocs.labels}, R.EOGChanLabels{i}), 1);
+                if ~isempty(idx)
+                    EOGChan = [EOGChan, idx];
+                end
+            end
+        end
+        
+        if isempty(EOGChan)
+            if R.FASTEROn
+                logPrint(R.LogFile,'[remove_bad_ICs] FASTER is on, but no EOG channels found with provided labels. Skipping FASTER.');
+            end
+            R.FASTEROn = false;
+        end
 
-        ECGChan = find(strcmp({EEG.chanlocs.type}, 'ECG'));
-        if isempty(ECGChan)
+        % Check if a separate ECG EEG structure is provided
+        if isempty(R.ECG_Struct) || isempty(R.ECG_Struct.data)
             if R.DetectECG
-                warning('[remove_bad_ICs] DetectECG is on, but no channel of type ECG was found. Skipping ECG detection.');
+                sprintf('[remove_bad_ICs] DetectECG is on, but no separate ECG EEG structure (ECG_Struct) or its data was provided. Skipping ECG detection.');
             end
             R.DetectECG = false;
         end
@@ -219,7 +246,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         %% --------- ECG Correlation Detection ----------
         if R.DetectECG
             logPrint('[remove_bad_ICs] Running ECG correlation detection...');
-            ecg_data = EEG.data(ECGChan(1), :);
+            ecg_data = R.ECG_Struct.data; % Use the separate ECG EEG structure's data
             correlations = corr(EEG.icaact', ecg_data');
             BadICs.ECG = find(abs(correlations) > R.ECGCorrelationThreshold)';
 
@@ -275,7 +302,4 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         end
         logPrint(R.LogFile, sprintf('[remove_bad_ICs] %s Total Unique Bad ICs: %d Details: %s', icaLabel, length(BadICs.all), mat2str(BadICs.all)));
 
-    catch ME
-        error('[remove_bad_ICs] An error occurred: %s', ME.message);
-    end
 end

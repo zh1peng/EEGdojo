@@ -66,14 +66,14 @@ params.Reref.excludeLabels = setdiff(params.ChanInfo.AllChan, [params.ChanInfo.R
 % params.Reref.Chan2averageOn = 'Off'; % Custom flag for pipeline if needed
 
 % ICA parameters (prep.remove_bad_ICs)
-% params.BadIC.RunIdx = 1; % Removed as per instruction
 params.BadIC.FilterICAOn = true; % Apply high-pass filter before ICA
 params.BadIC.FilterICALocutoff = 1; % High-pass filter cutoff for ICA (Hz)
 params.BadIC.ICAType = 'runica'; % Type of ICA algorithm
 params.BadIC.ICLabelOn = true; % Enable ICLabel classification
 params.BadIC.ICLabelThreshold = [0 0.1; 0.9 1]; % ICLabel thresholds
 params.BadIC.FASTEROn = true; % Enable FASTER component property analysis
-params.BadIC.DetectECG = false; % Enable ECG correlation-based detection (changed to false)
+params.BadIC.DetectECG = false; % Enable ECG correlation-based detection
+params.BadIC.ECGStruct = []; % New: Placeholder for external ECG data structure
 params.BadIC.ECGCorrelationThreshold = 0.8; % ECG correlation threshold
 
 % Bad point detection parameters (clean_rawdata) - Not directly modified by prep functions

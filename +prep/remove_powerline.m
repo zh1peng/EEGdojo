@@ -87,36 +87,31 @@ function EEG = remove_powerline(EEG, varargin)
             % pop_cleanline accepts vector of line freqs
 
             logPrint(R.LogFile,sprintf('[remove_powerline] Applying CleanLine at Hz: %s', num2str(harm)));
-            try
-                EEG = pop_cleanline(EEG, 'linefreqs', harm, 'newversion', 1);
-                EEG = eeg_checkset(EEG);
-                logPrint(R.LogFile, '[remove_powerline] CleanLine complete.');
-            catch ME
-                error('[remove_powerline] Error using CleanLine: %s', ME.message);
-            end
+
+            EEG = pop_cleanline(EEG, 'linefreqs', harm, 'newversion', 1);
+            EEG = eeg_checkset(EEG);
+            logPrint(R.LogFile, '[remove_powerline] CleanLine complete.');
+
 
         case 'notch'
             % --- Fixed FIR band-stop around each harmonic: [f-BW, f+BW] ---
 
             logPrint(R.LogFile,sprintf('[remove_powerline] Applying FIR notch (±%.2f Hz) at Hz: %s', R.BW, num2str(harm)));
-            try
-                for f0 = harm
-                    lo = max(f0 - R.BW, 0);   % lower edge
-                    hi = min(f0 + R.BW, nyq); % upper edge
-                    if lo <= 0 || hi <= 0 || lo >= hi
-                        logPrint(R.LogFile, '[remove_powerline] Skipping malformed band [%.2f, %.2f] Hz for harmonic %.2f Hz.', lo, hi, f0);
-                        continue; % skip malformed bands
-                    end
-                    % pop_eegfiltnew: band-stop when 'revfilt'=1
-                    % EEG = pop_eegfiltnew(EEG, locutoff, hicutoff, filtorder, revfilt, usefft, plotfreqz)
-                    EEG = pop_eegfiltnew(EEG, lo, hi, [], 1, [], 0);
-                    EEG = eeg_checkset(EEG);
-                    logPrint(R.LogFile, '[remove_powerline] Applied notch filter for %.2f Hz.', f0);
+
+            for f0 = harm
+                lo = max(f0 - R.BW, 0);   % lower edge
+                hi = min(f0 + R.BW, nyq); % upper edge
+                if lo <= 0 || hi <= 0 || lo >= hi
+                    logPrint(R.LogFile, '[remove_powerline] Skipping malformed band [%.2f, %.2f] Hz for harmonic %.2f Hz.', lo, hi, f0);
+                    continue; % skip malformed bands
                 end
-                logPrint(R.LogFile, '[remove_powerline] FIR notch complete.');
-            catch ME
-                error('[remove_powerline] Error using FIR notch: %s', ME.message);
+                % pop_eegfiltnew: band-stop when 'revfilt'=1
+                % EEG = pop_eegfiltnew(EEG, locutoff, hicutoff, filtorder, revfilt, usefft, plotfreqz)
+                EEG = pop_eegfiltnew(EEG, lo, hi, [], 1, [], 0);
+                EEG = eeg_checkset(EEG);
+                logPrint(R.LogFile, '[remove_powerline] Applied notch filter for %.2f Hz.', f0);
             end
+            logPrint(R.LogFile, '[remove_powerline] FIR notch complete.');
     end
     logPrint(R.LogFile, '[remove_powerline] --- Powerline noise removal complete ---');
 end

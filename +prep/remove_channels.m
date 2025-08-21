@@ -52,47 +52,48 @@ function EEG = remove_channels(EEG, varargin)
 
     p.parse(EEG, varargin{:});
     R = p.Results;
-
-    try
-        if isempty(R.ChanIdx) && isempty(R.ChanLabels)
-            logPrint(R.LogFile, '[remove_channels] No channels specified for removal. Skipping.');
-            return;
-        end
-
-        channels_to_remove_idx = [];
-
-        if ~isempty(R.ChanIdx)
-            channels_to_remove_idx = [channels_to_remove_idx, R.ChanIdx];
-            logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by index: %s', num2str(R.ChanIdx)));
-        end
-
-        if ~isempty(R.ChanLabels)
-            if ischar(R.ChanLabels)
-                R.ChanLabels = {R.ChanLabels};
-            end
-            idx_from_labels = chans2idx(EEG, R.ChanLabels, false); % false to not error if not found
-            if ~isempty(idx_from_labels)
-                channels_to_remove_idx = [channels_to_remove_idx, idx_from_labels];
-                logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by label: %s (indices: %s)', strjoin(R.ChanLabels, ', '), num2str(idx_from_labels)));
-            else
-                logPrint(R.LogFile, sprintf('[remove_channels] No channels found for labels: %s', strjoin(R.ChanLabels, ', ')));
-            end
-        end
-
-        channels_to_remove_idx = unique(channels_to_remove_idx); % Ensure unique indices
-        channels_to_remove_idx(channels_to_remove_idx > EEG.nbchan | channels_to_remove_idx < 1) = []; % Remove out-of-bounds indices
-
-        if isempty(channels_to_remove_idx)
-            logPrint(R.LogFile, '[remove_channels] No valid channels to remove after processing inputs. Skipping.');
-            return;
-        end
-
-        logPrint(R.LogFile, sprintf('[remove_channels] Removing %d channels: %s', length(channels_to_remove_idx), num2str(channels_to_remove_idx)));
-        EEG = pop_select(EEG, 'nochannel', channels_to_remove_idx);
-        EEG = eeg_checkset(EEG);
-        logPrint(R.LogFile, '[remove_channels] Channel removal complete.');
-
-    catch ME
-        error('[remove_channels] Channel removal failed: %s', ME.message);
+; 
+    if isempty(R.ChanIdx) && isempty(R.ChanLabels)
+        logPrint(R.LogFile, '[remove_channels] No channels specified for removal. Skipping.');
+        return;
     end
+
+    channels_to_remove_idx = [];
+
+    if ~isempty(R.ChanIdx)
+        channels_to_remove_idx = [channels_to_remove_idx, R.ChanIdx];
+        logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by index: %s', num2str(R.ChanIdx)));
+    end
+
+    if ~isempty(R.ChanLabels)
+        if ischar(R.ChanLabels)
+            R.ChanLabels = {R.ChanLabels};
+        end
+        % Changed call to chans2idx to use explicit name-value pair
+        idx_from_labels = chans2idx(EEG, R.ChanLabels, 'MustExist', false); 
+        if ~isempty(idx_from_labels)
+            channels_to_remove_idx = [channels_to_remove_idx, idx_from_labels];
+            logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by label: %s (indices: %s)', strjoin(R.ChanLabels, ', '), num2str(idx_from_labels)));
+        else
+            logPrint(R.LogFile, sprintf('[remove_channels] No channels found for labels: %s', strjoin(R.ChanLabels, ', ')));
+        end
+    end
+
+    channels_to_remove_idx = unique(channels_to_remove_idx); % Ensure unique indices
+    channels_to_remove_idx(channels_to_remove_idx > EEG.nbchan | channels_to_remove_idx < 1) = []; % Remove out-of-bounds indices
+
+    if isempty(channels_to_remove_idx)
+        logPrint(R.LogFile, '[remove_channels] No valid channels to remove after processing inputs. Skipping.');
+        return;
+    end
+
+    % Debugging: Inspect arguments before pop_select
+    param_name = 'nochannel';
+    param_value = channels_to_remove_idx;
+    logPrint(R.LogFile, sprintf('[remove_channels] Removing %d channels: %s', length(channels_to_remove_idx), num2str(channels_to_remove_idx)));
+    EEG = pop_select(EEG, param_name, param_value); % This is the line in question
+    EEG = eeg_checkset(EEG);
+    logPrint(R.LogFile, '[remove_channels] Channel removal complete.');
+
+
 end

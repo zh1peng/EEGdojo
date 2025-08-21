@@ -66,25 +66,22 @@ function [EEG, out] = segment_rest(EEG, varargin)
         return;
     end
 
-    try
-        logPrint(R.LogFile, '[segment_rest] ------ Segmenting resting-state data ------');
-        logPrint(R.LogFile, sprintf('[segment_rest] Epoch length: %.2f s, Overlap: %.2f%%', R.EpochLength, R.EpochOverlap*100));
 
-        % Create regularly spaced markers for epoching
-        logPrint(R.LogFile, '[segment_rest] Creating regularly spaced "epoch_start" events...');
-        EEG = eeg_regepochs(EEG, 'recurrence', R.EpochLength * (1 - R.EpochOverlap), 'eventtype', 'epoch_start', 'extractepochs', 'off');
-        logPrint(R.LogFile, sprintf('[segment_rest] %d "epoch_start" events created.', length(EEG.event)));
+    logPrint(R.LogFile, '[segment_rest] ------ Segmenting resting-state data ------');
+    logPrint(R.LogFile, sprintf('[segment_rest] Epoch length: %.2f s, Overlap: %.2f%%', R.EpochLength, R.EpochOverlap*100));
 
-        % Segment the data into epochs based on the new markers
-        logPrint(R.LogFile, '[segment_rest] Epoching data based on "epoch_start" events...');
-        EEG = pop_epoch(EEG, {'epoch_start'}, [0 R.EpochLength], 'epochinfo', 'yes');
+    % Create regularly spaced markers for epoching
+    logPrint(R.LogFile, '[segment_rest] Creating regularly spaced "epoch_start" events...');
+    EEG = eeg_regepochs(EEG, 'recurrence', R.EpochLength * (1 - R.EpochOverlap), 'eventtype', 'epoch_start', 'extractepochs', 'off');
+    logPrint(R.LogFile, sprintf('[segment_rest] %d "epoch_start" events created.', length(EEG.event)));
 
-        out.epochs_created = EEG.trials;
+    % Segment the data into epochs based on the new markers
+    logPrint(R.LogFile, '[segment_rest] Epoching data based on "epoch_start" events...');
+    EEG = pop_epoch(EEG, {'epoch_start'}, [0 R.EpochLength], 'epochinfo', 'yes');
 
-        logPrint(R.LogFile, sprintf('[segment_rest] Data segmented into %d epochs.', out.epochs_created));
-        logPrint(R.LogFile, '[segment_rest] ------ Segmentation complete ------');
+    out.epochs_created = EEG.trials;
 
-    catch ME
-        error('[segment_rest] Segmentation failed: %s', ME.message);
-    end
+    logPrint(R.LogFile, sprintf('[segment_rest] Data segmented into %d epochs.', out.epochs_created));
+    logPrint(R.LogFile, '[segment_rest] ------ Segmentation complete ------');
+
 end

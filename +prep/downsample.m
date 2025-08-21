@@ -42,12 +42,9 @@ function [EEG, out] = downsample(EEG, varargin)
     out.new_sampling_rate = R.freq;
 
     logPrint(R.LogFile, sprintf('[downsample] Downsampling data to %d Hz.', R.freq));
-    try
-        EEG = pop_resample(EEG, R.freq);
-        EEG = eeg_checkset(EEG); % Update EEG structure after changes
-        logPrint(R.LogFile, sprintf('[downsample] Downsampling complete. New sampling rate: %d Hz.', EEG.srate));
-        out.new_sampling_rate = EEG.srate; % Ensure output reflects actual srate
-    catch ME
-        error('[downsample] Downsampling failed: %s', ME.message);
-    end
+    EEG = pop_resample(EEG, R.freq);
+    EEG = eeg_checkset(EEG); % Update EEG structure after changes
+    logPrint(R.LogFile, sprintf('[downsample] Downsampling complete. New sampling rate: %d Hz.', EEG.srate));
+    out.new_sampling_rate = EEG.srate; % Ensure output reflects actual srate
+
 end

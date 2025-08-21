@@ -74,29 +74,26 @@ function [EEG, out] = segment_task(EEG, varargin)
         return;
     end
 
-    try
-        logPrint(R.LogFile, '[segment_task] ------ Segmenting task data ------');
-        logPrint(R.LogFile, sprintf('[segment_task] Markers: %s, Time window: [%.2f %.2f]s', strjoin(R.Markers, ', '), R.TimeWindow(1), R.TimeWindow(2)));
 
-        % Segment the data into epochs
-        logPrint(R.LogFile, '[segment_task] Calling pop_epoch to segment data...');
-        EEG = pop_epoch(EEG, R.Markers, R.TimeWindow, 'epochinfo', 'yes');
-        
-        % Log the number of epochs for each marker type
-        unique_markers = unique(R.Markers);
-        for i = 1:length(unique_markers)
-            marker = unique_markers{i};
-            n_epochs = sum(ismember({EEG.epoch.eventtype}, marker));
-            out.epochs_created.(marker) = n_epochs;
-            logPrint(R.LogFile, sprintf('[segment_task] Created %d epochs for marker %s', n_epochs, marker));
-        end
-        logPrint(R.LogFile, sprintf('[segment_task] Total epochs created: %d', EEG.trials));
-        
-        out.total_epochs = EEG.trials;
+    logPrint(R.LogFile, '[segment_task] ------ Segmenting task data ------');
+    logPrint(R.LogFile, sprintf('[segment_task] Markers: %s, Time window: [%.2f %.2f]s', strjoin(R.Markers, ', '), R.TimeWindow(1), R.TimeWindow(2)));
 
-        logPrint(R.LogFile, '[segment_task] ------ Task segmentation complete ------');
-
-    catch ME
-        error('[segment_task] Task segmentation failed: %s', ME.message);
+    % Segment the data into epochs
+    logPrint(R.LogFile, '[segment_task] Calling pop_epoch to segment data...');
+    EEG = pop_epoch(EEG, R.Markers, R.TimeWindow, 'epochinfo', 'yes');
+    
+    % Log the number of epochs for each marker type
+    unique_markers = unique(R.Markers);
+    for i = 1:length(unique_markers)
+        marker = unique_markers{i};
+        n_epochs = sum(ismember({EEG.epoch.eventtype}, marker));
+        out.epochs_created.(marker) = n_epochs;
+        logPrint(R.LogFile, sprintf('[segment_task] Created %d epochs for marker %s', n_epochs, marker));
     end
+    logPrint(R.LogFile, sprintf('[segment_task] Total epochs created: %d', EEG.trials));
+    
+    out.total_epochs = EEG.trials;
+
+    logPrint(R.LogFile, '[segment_task] ------ Task segmentation complete ------');
+
 end

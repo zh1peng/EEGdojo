@@ -1,34 +1,44 @@
 function [EEG, out] = correct_baseline(EEG, varargin)
 % CORRECT_BASELINE Performs baseline correction on EEG data.
+%   This function applies baseline correction to EEG data, either epoched
+%   or continuous, by subtracting the mean of a specified baseline window.
+%   It uses the EEGLAB function `pop_rmbase`.
 %
-% This function applies baseline correction to EEG data, either epoched
-% or continuous, by subtracting the mean of a specified baseline window.
-% It uses the EEGLAB function `pop_rmbase`.
+% Syntax:
+%   [EEG, out] = prep.correct_baseline(EEG, 'param', value, ...)
 %
-% Inputs:
+% Input Arguments:
 %   EEG         - EEGLAB EEG structure.
-%   varargin    - Optional parameters:
-%     'BaselineWindow' - (numeric array) A two-element array [start_ms, end_ms]
-%                        specifying the baseline window in milliseconds.
-%                        e.g., [-200 0] for 200ms before stimulus onset.
-%                        Default is []. If empty, baseline correction is skipped.
-%     'LogFile'        - (char) Path to the log file for recording processing
-%                        information. Default is ''.
 %
-% Outputs:
+% Optional Parameters (Name-Value Pairs):
+%   'BaselineWindow' - (numeric array, default: [])
+%                      A two-element array [start_ms, end_ms] specifying the
+%                      baseline window in milliseconds. For example, [-200 0]
+%                      for 200ms before stimulus onset. If empty, baseline
+%                      correction is skipped.
+%   'LogFile'        - (char | string, default: '')
+%                      Path to a log file for verbose output. If empty, output
+%                      is directed to the command window.
+%
+% Output Arguments:
 %   EEG         - Modified EEGLAB EEG structure with baseline corrected data.
 %   out         - Structure containing output information:
-%     .baseline_window_ms - (numeric array) The baseline window used for correction.
+%                 out.baseline_window_ms - (numeric array) The baseline window
+%                                          used for correction.
 %
 % Examples:
-%   % 1. Apply baseline correction from -200ms to 0ms:
-%   EEG = correct_baseline(EEG, 'BaselineWindow', [-200 0]);
+%   % Example 1: Apply baseline correction from -200ms to 0ms (without pipeline)
+%   % Load an EEG dataset first, e.g., EEG = pop_loadset('eeg_data.set');
+%   EEG_corrected = prep.correct_baseline(EEG, 'BaselineWindow', [-200 0]);
+%   disp('Baseline correction applied from -200ms to 0ms.');
 %
-%   % 2. Usage within a pipeline:
-%   %    (Assuming 'p' is a parameter structure containing 'p.logFile')
+%   % Example 2: Usage within a pipeline
+%   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.correct_baseline, ...
 %       'BaselineWindow', [-500 0], ...
-%       'LogFile', p.logFile);
+%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
+%   disp('Baseline correction applied via pipeline.');
 %
 % See also: pop_rmbase
 
@@ -49,22 +59,16 @@ function [EEG, out] = correct_baseline(EEG, varargin)
         return;
     end
 
-    try
-        logPrint(R.LogFile, '[correct_baseline] Starting baseline correction.');
-        logPrint(R.LogFile, sprintf('[correct_baseline] Baseline window: [%d %d] ms', R.BaselineWindow(1), R.BaselineWindow(2)));
+    logPrint(R.LogFile, '[correct_baseline] Starting baseline correction.');
+    logPrint(R.LogFile, sprintf('[correct_baseline] Baseline window: [%d %d] ms', R.BaselineWindow(1), R.BaselineWindow(2)));
 
-        if EEG.trials > 1
-            logPrint(R.LogFile, '[correct_baseline] Applying baseline correction to epoched data.');
-        else
-            logPrint(R.LogFile, '[correct_baseline] Applying baseline correction to continuous data.');
-        end
-
-        % Perform baseline correction
-        EEG = pop_rmbase(EEG, R.BaselineWindow);
-        
-        logPrint(R.LogFile, '[correct_baseline] Baseline correction complete.');
-
-    catch ME
-        error('[correct_baseline] Baseline correction failed: %s', ME.message);
+    if EEG.trials > 1
+        logPrint(R.LogFile, '[correct_baseline] Applying baseline correction to epoched data.');
+    else
+        logPrint(R.LogFile, '[correct_baseline] Applying baseline correction to continuous data.');
     end
+    % Perform baseline correction
+    EEG = pop_rmbase(EEG, R.BaselineWindow);
+    EEG = eeg_checkset(EEG); % Always checkset after modifying EEG
+    logPrint(R.LogFile, '[correct_baseline] Baseline correction complete.');
 end
