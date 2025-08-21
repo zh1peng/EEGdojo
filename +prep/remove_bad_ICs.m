@@ -53,7 +53,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 %   %% ECG Correlation Detection Parameters
 %   'DetectECG'             - (logical, default: true)
 %                             Enable ECG correlation-based IC rejection.
-%   'ECG_EEG_Struct'        - (struct, default: [])
+%   'ECG_Struct'        - (struct, default: [])
 %                             A separate EEGLAB EEG structure containing only the ECG channel data. This is used for correlating IC activations with ECG. If not provided, ECG detection will be skipped.
 %   'ECGCorrelationThreshold'- (numeric, default: 0.8)
 %                             Absolute correlation threshold for ECG detection.
@@ -84,7 +84,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 % pipe = pipe.addStep(@prep.remove_bad_ICs, ...
 %     'DetectECG', true, ...
 %     'ECGCorrelationThreshold', 0.75, ...
-%     'ECG_EEG_Struct', ecg_eeg_data, ...      % pass separate ECG EEG struct
+%     'ECG_Struct', ecg_eeg_data, ...      % pass separate ECG EEG struct
 %     'ICLabelOn', false, ...                  % disable ICLabel
 %     'FASTEROn', false, ...                   % disable FASTER
 %     'RunIdx', 2, ...                         % use the 2nd ICA run

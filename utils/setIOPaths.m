@@ -20,6 +20,7 @@ function IO = setIOPaths(IO)
     % Define the log path and output filenames
     IO.logPath = fullfile(IO.outputpath, [baseName, '_log']);
     IO.outfilename = [baseName '_preprocessed.set'];
+    IO.ECGfilename = [baseName '_ECG.set'];
     IO.error_logFile = fullfile(IO.logPath, [baseName, '_error.log']);
     IO.logFile = fullfile(IO.logPath, [baseName '_preprocessed.log']);
 
