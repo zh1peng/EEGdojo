@@ -1,15 +1,61 @@
 function EEG = remove_powerline(EEG, varargin)
-% remove_powerline  Remove mains/line noise via CleanLine or FIR notch.
-% Usage:
-%   EEG = remove_powerline(EEG, 'Method','cleanline', 'Freq',50, 'BW',2, 'NHarm',3);
-%   EEG = remove_powerline(EEG, 'Method','notch',     'Freq',60, 'BW',3, 'NHarm',2);
+% REMOVE_POWERLINE  Removes powerline (mains) noise from EEG data.
+%   This function offers two methods for powerline noise removal:
+%   1. CleanLine: An adaptive method that estimates and removes sinusoidal
+%      noise components.
+%   2. FIR Notch: Applies fixed-width FIR band-stop filters at the fundamental
+%      frequency and its harmonics.
+%   The function automatically identifies harmonics up to the Nyquist frequency.
 %
-% Params:
-%   Method  - 'cleanline' | 'notch' (default 'cleanline')
-%   Freq    - fundamental line frequency in Hz (default 50)
-%   BW      - half-bandwidth in Hz for notch (±BW) (default 2)
-%   NHarm   - number of harmonics to target (default 3). Only those < Nyquist are used.
-%   Verbose - true/false (default false)
+% Syntax:
+%   EEG = prep.remove_powerline(EEG, 'param', value, ...)
+%
+% Input Arguments:
+%   EEG         - EEGLAB EEG structure.
+%
+% Optional Parameters (Name-Value Pairs):
+%   'Method'    - (char | string, 'cleanline' | 'notch', default: 'cleanline')
+%                 Method to use for powerline noise removal.
+%                 'cleanline': Uses pop_cleanline for adaptive noise removal.
+%                 'notch': Applies FIR notch filters using pop_eegfiltnew.
+%   'Freq'      - (numeric, default: 50)
+%                 Fundamental powerline frequency in Hz (e.g., 50 for Europe,
+%                 60 for North America).
+%   'BW'        - (numeric, default: 2)
+%                 Half-bandwidth in Hz for the FIR notch filter (±BW around
+%                 each target frequency). Only applicable when 'Method' is 'notch'.
+%   'NHarm'     - (numeric, default: 3)
+%                 Number of harmonics to target. The function will only apply
+%                 filters to harmonics that are below the Nyquist frequency.
+%   'LogFile'   - (char | string, default: '')
+%                 Path to a log file for verbose output. If empty, output
+%                 is directed to the command window.
+%
+% Output Arguments:
+%   EEG         - Modified EEGLAB EEG structure with powerline noise removed.
+%
+% Examples:
+%   % Example 1: Remove 50 Hz powerline noise using CleanLine (without pipeline)
+%   % Load an EEG dataset first, e.g., EEG = pop_loadset('eeg_data.set');
+%   EEG_cleaned = prep.remove_powerline(EEG, ...
+%       'Method', 'cleanline', ...
+%       'Freq', 50, ...
+%       'NHarm', 4, ...
+%       'LogFile', 'powerline_log.txt');
+%   disp('Powerline noise removal complete using CleanLine.');
+%
+%   % Example 2: Remove 60 Hz powerline noise using FIR notch filters (with pipeline)
+%   % Assuming 'pipe' is an initialized pipeline object
+%   pipe = pipe.addStep(@prep.remove_powerline, ...
+%       'Method', 'notch', ...
+%       'Freq', 60, ...
+%       'BW', 1, ...
+%       'NHarm', 3, ...
+%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
+%   disp('Powerline noise removal complete using FIR notch filters.');
+%
+% See also: pop_cleanline, pop_eegfiltnew
 
     % ---- Parse inputs ----
     p = inputParser;
@@ -18,12 +64,12 @@ function EEG = remove_powerline(EEG, varargin)
     p.addParameter('Freq', 50, @(x) isnumeric(x) && isscalar(x) && x>0);
     p.addParameter('BW',   2,  @(x) isnumeric(x) && isscalar(x) && x>0);
     p.addParameter('NHarm',3,  @(x) isnumeric(x) && isscalar(x) && x>=1);
-    p.addParameter('logFile', '', @ischar);
+    p.addParameter('LogFile', '', @ischar);
     p.parse(EEG, varargin{:});
     R = p.Results;
 
 
-    logPrint(R.logFile, sprintf('--- Removing powerline noise using %s method ---', R.Method));
+    logPrint(R.LogFile, sprintf('[remove_powerline] --- Removing powerline noise using %s method ---', R.Method));
 
     fs = EEG.srate;
     nyq = fs/2;
@@ -32,7 +78,7 @@ function EEG = remove_powerline(EEG, varargin)
     harm = (1:R.NHarm) * R.Freq;
     harm = harm(harm < nyq);
     if isempty(harm)
-        error('[remove_line_noise] No harmonics < Nyquist. \n'); 
+        error('[remove_powerline] No harmonics found below Nyquist frequency (%.2f Hz). Check Freq and NHarm parameters.', nyq);
     end
 
     switch lower(R.Method)
@@ -40,35 +86,37 @@ function EEG = remove_powerline(EEG, varargin)
             % --- Adaptive removal using CleanLine ---
             % pop_cleanline accepts vector of line freqs
 
-            logPrint(R.logFile,sprintf('[remove_line_noise] CleanLine at Hz: %s\n', num2str(harm)));
+            logPrint(R.LogFile,sprintf('[remove_powerline] Applying CleanLine at Hz: %s', num2str(harm)));
             try
                 EEG = pop_cleanline(EEG, 'linefreqs', harm, 'newversion', 1);
                 EEG = eeg_checkset(EEG);
-                logPrint(R.logFile, '--- CleanLine complete ---');
+                logPrint(R.LogFile, '[remove_powerline] CleanLine complete.');
             catch ME
-                error('[remove_line_noise] Error using CleanLine: %s\n', ME.message);
+                error('[remove_powerline] Error using CleanLine: %s', ME.message);
             end
 
         case 'notch'
             % --- Fixed FIR band-stop around each harmonic: [f-BW, f+BW] ---
 
-            logPrint(R.logFile,'[remove_line_noise] FIR notch (±%.2f Hz) at Hz: %s\n', R.BW, num2str(harm));
+            logPrint(R.LogFile,sprintf('[remove_powerline] Applying FIR notch (±%.2f Hz) at Hz: %s', R.BW, num2str(harm)));
             try
                 for f0 = harm
                     lo = max(f0 - R.BW, 0);   % lower edge
                     hi = min(f0 + R.BW, nyq); % upper edge
                     if lo <= 0 || hi <= 0 || lo >= hi
+                        logPrint(R.LogFile, '[remove_powerline] Skipping malformed band [%.2f, %.2f] Hz for harmonic %.2f Hz.', lo, hi, f0);
                         continue; % skip malformed bands
                     end
                     % pop_eegfiltnew: band-stop when 'revfilt'=1
                     % EEG = pop_eegfiltnew(EEG, locutoff, hicutoff, filtorder, revfilt, usefft, plotfreqz)
                     EEG = pop_eegfiltnew(EEG, lo, hi, [], 1, [], 0);
                     EEG = eeg_checkset(EEG);
+                    logPrint(R.LogFile, '[remove_powerline] Applied notch filter for %.2f Hz.', f0);
                 end
-                logPrint(R.logFile, '--- FIR notch complete ---');
+                logPrint(R.LogFile, '[remove_powerline] FIR notch complete.');
             catch ME
-                error('[remove_line_noise] Error using FIR notch: %s\n', ME.message);
-            end      
+                error('[remove_powerline] Error using FIR notch: %s', ME.message);
+            end
     end
-    logPrint(R.logFile, '--- Powerline noise removal complete ---');
+    logPrint(R.LogFile, '[remove_powerline] --- Powerline noise removal complete ---');
 end
