@@ -34,7 +34,7 @@ function [EEG, out] = interpolate(EEG, varargin)
 %   % Example 2: Usage within a pipeline
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.interpolate, ...
-%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('Missing channels interpolated via pipeline.');
 %

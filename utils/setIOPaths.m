@@ -21,15 +21,15 @@ function IO = setIOPaths(IO)
     IO.logPath = fullfile(IO.outputpath, [baseName, '_log']);
     IO.outfilename = [baseName '_preprocessed.set'];
     IO.ECGfilename = [baseName '_ECG.set'];
-    IO.error_logFile = fullfile(IO.logPath, [baseName, '_error.log']);
-    IO.logFile = fullfile(IO.logPath, [baseName '_preprocessed.log']);
+    IO.error_LogFile = fullfile(IO.logPath, [baseName, '_error.log']);
+    IO.LogFile = fullfile(IO.logPath, [baseName '_preprocessed.log']);
 
     % Delete existing log files if they exist
-    if exist(IO.error_logFile, 'file')
-        delete(IO.error_logFile);
+    if exist(IO.error_LogFile, 'file')
+        delete(IO.error_LogFile);
     end
-    if exist(IO.logFile, 'file')
-        delete(IO.logFile);
+    if exist(IO.LogFile, 'file')
+        delete(IO.LogFile);
     end
     
     IO.baseName = baseName;

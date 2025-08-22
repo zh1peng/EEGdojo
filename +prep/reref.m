@@ -39,7 +39,7 @@ function [EEG, out] = reref(EEG, varargin)
 %   % Example 2: Re-reference to average (with pipeline)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.reref, ...
-%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('EEG data re-referenced to average.');
 %

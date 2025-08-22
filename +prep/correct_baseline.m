@@ -36,7 +36,7 @@ function [EEG, out] = correct_baseline(EEG, varargin)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.correct_baseline, ...
 %       'BaselineWindow', [-500 0], ...
-%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('Baseline correction applied via pipeline.');
 %

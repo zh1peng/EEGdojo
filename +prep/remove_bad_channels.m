@@ -13,9 +13,8 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 %   EEG         - EEGLAB EEG structure.
 %
 % Optional Parameters (Name-Value Pairs):
-%   'IdxDetect'         - (numeric array | logical array, default: all channels)
-%                         Indices of channels to consider for detection. If empty,
-%                         all channels are considered.
+%   'ExcludeLabel'      - (cell array of strings, default: {})
+%                         Labels of channels to exclude from bad channel detection.
 %   'Action'            - (char | string, 'remove' | 'flag', default: 'remove')
 %                         'remove': Removes bad channels from the dataset.
 %                         'flag': Adds a mask to EEG.etc.clean_channel_mask
@@ -24,8 +23,8 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 %                         Path to save log plots and reports.
 %   'LogFile'           - (char | string, default: '')
 %                         Base name for the log report file.
-%   'KnownBadIdx'       - (numeric array, default: [])
-%                         Indices of channels already known to be bad. These will
+%   'KnownBadLabel'     - (cell array of strings, default: [])
+%                         Labels of channels already known to be bad. These will
 %                         be included in the final list of bad channels.
 %
 %   %% Classic EEGLAB detectors (pop_rejchan)
@@ -117,11 +116,12 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
     p.addRequired('EEG', @isstruct);
 
     % Scope, I/O, and action parameters
-    p.addParameter('IdxDetect',         [], @(x) isnumeric(x) || islogical(x));
+    p.addParameter('ExcludeLabel',      {}, @(x) iscellstr(x) || ischar(x) || isstring(x));
     p.addParameter('Action',            'remove', @(s) any(strcmpi(s,{'remove','flag'})));
     p.addParameter('LogPath',           '', @(s) ischar(s) || isstring(s));
     p.addParameter('LogFile',           '', @(s) ischar(s) || isstring(s));
-    p.addParameter('KnownBadIdx',       [], @(x) isempty(x) || isnumeric(x));
+    p.addParameter('KnownBadLabel',       [], @(x) isempty(x) || isnumeric(x));
+    
 
     % Classic EEGLAB detectors
     p.addParameter('Kurtosis',          false, @islogical);
@@ -160,13 +160,26 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
 
     % ----------------- Initial Setup -----------------
-    if isempty(R.IdxDetect), R.IdxDetect = 1:EEG.nbchan; end
-    if islogical(R.IdxDetect), R.IdxDetect = find(R.IdxDetect); end
+    % Exclude specified channels from detection
+    if ~isempty(R.ExcludeLabel)
+        excludeIdx = chans2idx(EEG, R.ExcludeLabel);
+        IdxDetect = setdiff(1:EEG.nbchan, excludeIdx);
+    else
+        IdxDetect = 1:EEG.nbchan;
+    end
+
+    if ~isempty(R.KnownBadLabel)
+        KnownBadIdx = chans2idx(EEG, R.KnownBadLabel);
+    else
+        KnownBadIdx = [];
+    end
+    
+
     if ~exist(R.LogPath,'dir')&~isempty(R.LogPath), mkdir(R.LogPath); end
 
     % Preserve original channel locations
-    if ~isfield(EEG,'urchanlocs') || isempty(EEG.urchanlocs), [EEG.urchanlocs] = deal(EEG.chanlocs); end
-    if ~isfield(EEG,'chaninfo') || ~isfield(EEG.chaninfo,'nodatchans'), EEG.chaninfo.nodatchans = []; end
+    [EEG.urchanlocs] = deal(EEG.chanlocs);
+    EEG.chaninfo.nodatchans = [];
 
     % ----------------- Run Detectors -----------------
     Bad  = struct();
@@ -174,8 +187,8 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.Kurtosis
         logPrint(R.LogFile, '[remove_bad_channels] Running Kurtosis detector...');
-        [~, idxRel] = pop_rejchan(EEG, 'elec', R.IdxDetect, 'threshold', R.Kurt_Threshold, 'norm', lower(R.NormOn), 'measure', 'kurt');
-        Bad.Kurt = R.IdxDetect(idxRel);
+        [~, idxRel] = pop_rejchan(EEG, 'elec', IdxDetect, 'threshold', R.Kurt_Threshold, 'norm', lower(R.NormOn), 'measure', 'kurt');
+        Bad.Kurt = IdxDetect(idxRel);
         used{end+1} = 'Kurt';
         logplot_badchannels(EEG, Bad.Kurt, R.LogPath, 'Kurt');
     else
@@ -184,8 +197,8 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.Spectrum
         logPrint(R.LogFile, '[remove_bad_channels] Running Spectrum detector...');
-        [~, idxRel] = pop_rejchan(EEG, 'elec', R.IdxDetect, 'threshold', R.Spec_Threshold, 'norm', lower(R.NormOn), 'measure', 'spec', 'freqrange', R.Spec_FreqRange);
-        Bad.Spec = R.IdxDetect(idxRel);
+        [~, idxRel] = pop_rejchan(EEG, 'elec', IdxDetect, 'threshold', R.Spec_Threshold, 'norm', lower(R.NormOn), 'measure', 'spec', 'freqrange', R.Spec_FreqRange);
+        Bad.Spec = IdxDetect(idxRel);
         used{end+1} = 'Spec';
         logplot_badchannels(EEG, Bad.Spec, R.LogPath, 'Spec');
     else
@@ -194,8 +207,8 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.Probability
         logPrint(R.LogFile, '[remove_bad_channels] Running Probability detector...');
-        [~, idxRel] = pop_rejchan(EEG, 'elec', R.IdxDetect, 'threshold', R.Prob_Threshold, 'norm', lower(R.NormOn), 'measure', 'prob');
-        Bad.Prob = R.IdxDetect(idxRel);
+        [~, idxRel] = pop_rejchan(EEG, 'elec', IdxDetect, 'threshold', R.Prob_Threshold, 'norm', lower(R.NormOn), 'measure', 'prob');
+        Bad.Prob = IdxDetect(idxRel);
         used{end+1} = 'Prob';
         logplot_badchannels(EEG, Bad.Prob, R.LogPath, 'Prob');
     else
@@ -204,7 +217,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.FASTER_MeanCorr
         logPrint(R.LogFile, '[remove_bad_channels] Running FASTER Mean Correlation detector...');
-        args = {'elec', R.IdxDetect, 'measure','meanCorr', 'threshold', R.FASTER_Threshold};
+        args = {'elec', IdxDetect, 'measure','meanCorr', 'threshold', R.FASTER_Threshold};
         if ~isempty(R.FASTER_RefChan), args = [args, {'refchan', R.FASTER_RefChan}]; end
         if ~isempty(R.FASTER_Bandpass), args = [args, {'bandpass', R.FASTER_Bandpass}]; end
         [~, idx] = FASTER_rejchan(EEG, args{:});
@@ -218,7 +231,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.FASTER_Variance
         logPrint(R.LogFile, '[remove_bad_channels] Running FASTER Variance detector...');
-        args = {'elec', R.IdxDetect, 'measure','variance', 'threshold', R.FASTER_VarThreshold};
+        args = {'elec', IdxDetect, 'measure','variance', 'threshold', R.FASTER_VarThreshold};
         if ~isempty(R.FASTER_RefChan), args = [args, {'refchan', R.FASTER_RefChan}]; end
         if ~isempty(R.FASTER_Bandpass), args = [args, {'bandpass', R.FASTER_Bandpass}]; end
         [~, idx] = FASTER_rejchan(EEG, args{:});
@@ -232,7 +245,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.FASTER_Hurst
         logPrint(R.LogFile, '[remove_bad_channels] Running FASTER Hurst detector...');
-        args = {'elec', R.IdxDetect, 'measure','hurst', 'threshold', R.FASTER_HurstThreshold};
+        args = {'elec', IdxDetect, 'measure','hurst', 'threshold', R.FASTER_HurstThreshold};
         if ~isempty(R.FASTER_RefChan), args = [args, {'refchan', R.FASTER_RefChan}]; end
         if ~isempty(R.FASTER_Bandpass), args = [args, {'bandpass', R.FASTER_Bandpass}]; end
         [~, idx] = FASTER_rejchan(EEG, args{:});
@@ -246,7 +259,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.CleanRaw_Flatline
         logPrint(R.LogFile, '[remove_bad_channels] Running CleanRaw Flatline detector...');
-        idx = cleanraw_rejchan(EEG, 'elec', R.IdxDetect, 'measure','flatline', 'threshold', R.Flatline_Sec, 'highpass', R.CleanDrift_Band);
+        idx = cleanraw_rejchan(EEG, 'elec', IdxDetect, 'measure','flatline', 'threshold', R.Flatline_Sec, 'highpass', R.CleanDrift_Band);
         Bad.Flatline = idx(:)';
         used{end+1} = 'Flatline';
         logplot_badchannels(EEG, Bad.Flatline, R.LogPath, 'Flatline');
@@ -256,7 +269,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
 
     if R.CleanRaw_Noise
         logPrint(R.LogFile, '[remove_bad_channels] Running CleanRaw Noise detector...');
-        idx = cleanraw_rejchan(EEG, 'elec', R.IdxDetect, 'measure','CleanChan', 'chancorr_crit', R.CleanChan_Corr, 'line_crit', R.CleanChan_Line, 'max_broken_time', R.CleanChan_MaxBad, 'min_corr_samples', R.CleanChan_NSamp, 'highpass', R.CleanDrift_Band);
+        idx = cleanraw_rejchan(EEG, 'elec', IdxDetect, 'measure','CleanChan', 'chancorr_crit', R.CleanChan_Corr, 'line_crit', R.CleanChan_Line, 'maxbadtime', R.CleanChan_MaxBad, 'num_samples', R.CleanChan_NSamp, 'highpass', R.CleanDrift_Band);
         Bad.CleanChan = idx(:)';
         used{end+1} = 'CleanChan';
         logplot_badchannels(EEG, Bad.CleanChan, R.LogPath, 'CleanChan');
@@ -264,7 +277,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
         Bad.CleanChan = [];
     end
 
-    Bad.Known = unique(R.KnownBadIdx(:)','stable');
+    Bad.Known = unique(KnownBadIdx(:)','stable');
 
     % ----------------- Combine & Summarize -----------------
     fields = {'Kurt','Spec','Prob','MeanCorr','Variance','Hurst','Flatline','CleanChan','Known'};
@@ -307,7 +320,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
     out.Bad = Bad;
     out.summary = summary;
     out.detectors_used = used;
-    out.IdxDetect = R.IdxDetect;
+    out.IdxDetect = IdxDetect;
 
     if ~isfield(EEG.etc, 'EEGdojo'), EEG.etc.EEGdojo = struct(); end
     EEG.etc.EEGdojo.BadChanIdx = Bad.all;

@@ -1,14 +1,14 @@
-function logPrint(logFile, msg)
+function logPrint(LogFile, msg)
     % logPrint - Print a message to both log file and MATLAB console (robust).
     %
     % Usage:
-    %   logPrint(logFile, msg)
+    %   logPrint(LogFile, msg)
     %
     % If the log file cannot be opened, message will still be printed
     % to MATLAB Command Window without error.
 
     % Try open log file in append mode
-    logFID = fopen(logFile, 'a');
+    logFID = fopen(LogFile, 'a');
     
     % Always print to Command Window
     fprintf('%s\n', msg);
@@ -19,7 +19,7 @@ function logPrint(logFile, msg)
         fclose(logFID);
     else
         % Optional: warn once that logging failed
-        sprintf('[Warning] Could not open log file: %s. Only printed to console.', logFile);
+        sprintf('[Warning] Could not open log file: %s. Only printed to console.', LogFile);
     end
 end
 

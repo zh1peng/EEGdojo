@@ -38,7 +38,7 @@ function [EEG, out] = filter(EEG, varargin)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.filter, ...
 %       'LowCutoff', 1, ...
-%       'LogFile', p.logFile); %% p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('EEG data high-pass filtered via pipeline.');
 %

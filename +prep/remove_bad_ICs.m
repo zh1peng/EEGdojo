@@ -114,10 +114,11 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 
     % ICLabel parameters
     p.addParameter('ICLabelOn', true, @islogical);
-    p.addParameter('ICLabelThreshold', [0 0.1; 0.9 1], @isnumeric);
+    p.addParameter('ICLabelThreshold', [NaN NaN; 0.7 1; 0.7 1; 0.7 1; 0.7 1; 0.7 1; NaN NaN], @isnumeric);
 
     % FASTER parameters
     p.addParameter('FASTEROn', true, @islogical);
+    p.addParameter('FASTERExludeTreshold', 0.7, @(x) isnumeric(x) && isscalar(x) && x > 0 && x <= 1);
     p.addParameter('EOGChanLabels', {}, @iscellstr);
 
     % ECG detection parameters
@@ -166,7 +167,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         end
 
         %% --------- Run ICA ----------
-        logPrint('[remove_bad_ICs] Checking ICA decomposition...');
+        logPrint(R.LogFile, '[remove_bad_ICs] Checking ICA decomposition...');
         if size(EEG.data, 3) > 1
             tmpdata = reshape(EEG.data, [EEG.nbchan, EEG.pnts * EEG.trials]);
             pca_dim = min(EEG.nbchan-1, getrank(tmpdata));
@@ -175,7 +176,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         end
 
         if R.FilterICAOn
-            logPrint('[remove_bad_ICs] Applying high-pass filter and computing ICA...');
+            logPrint(R.LogFile, '[remove_bad_ICs] Applying high-pass filter and computing ICA...');
             filterEEG = pop_eegfiltnew(EEG, 'locutoff', R.FilterICALocutoff, 'plotfreqz', 0);
             filterEEG = pop_runica(filterEEG, 'icatype', R.ICAType, 'extended', 1, 'interrupt', 'off', 'pca', pca_dim);
             EEG.icaweights = filterEEG.icaweights;
@@ -184,21 +185,21 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
             EEG.icawinv = filterEEG.icawinv;
             EEG.icaact = eeg_getica(EEG);
             EEG = eeg_checkset(EEG);
-            logPrint('[remove_bad_ICs] ICA computed with filtering.');
+            logPrint(R.LogFile, '[remove_bad_ICs] ICA computed with filtering.');
         else
-            logPrint('[remove_bad_ICs] Computing ICA without filtering...');
+            logPrint(R.LogFile, '[remove_bad_ICs] Computing ICA without filtering...');
             EEG = pop_runica(EEG, 'icatype', R.ICAType, 'extended', 1, 'interrupt', 'off', 'pca', pca_dim);
-            logPrint('[remove_bad_ICs] ICA computed.');
+            logPrint(R.LogFile, '[remove_bad_ICs] ICA computed.');
         end
 
         %% --------- ICLabel Detection ----------
         if R.ICLabelOn
-            logPrint('[remove_bad_ICs] Running ICLabel detection...');
+            logPrint(R.LogFile, '[remove_bad_ICs] Running ICLabel detection...');
             EEG = pop_iclabel(EEG, 'default');
             EEG = pop_icflag(EEG, R.ICLabelThreshold);
             BadICs.IClabel = find(EEG.reject.gcompreject == 1)';
             if ~isempty(BadICs.IClabel)
-                logPrint('[remove_bad_ICs] ICLabel identified %d bad ICs. Generating property plots...', length(BadICs.IClabel));
+                logPrint(R.LogFile, sprintf('[remove_bad_ICs] ICLabel identified %d bad ICs. Generating property plots...', length(BadICs.IClabel)));
                 for i = 1:length(BadICs.IClabel)
                     icIdx = BadICs.IClabel(i);
                     pop_prop(EEG, 0, icIdx, NaN, {'freqrange', [2 40]});
@@ -206,13 +207,13 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                     close(gcf);
                 end
             else
-                logPrint('[remove_bad_ICs] ICLabel found no bad ICs.');
+                logPrint(R.LogFile, '[remove_bad_ICs] ICLabel found no bad ICs.');
             end
         end
 
         %% --------- FASTER Detection ----------
         if R.FASTEROn
-            logPrint('[remove_bad_ICs] Running FASTER detection...');
+            logPrint(R.LogFile, '[remove_bad_ICs] Running FASTER detection...');
             ICA_list = component_properties(EEG, EOGChan);
             BadICs_tmp = find(min_z(ICA_list) == 1)';
 
@@ -221,7 +222,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                 if ~isempty(BadICs_tmp)
                     for i = 1:length(BadICs_tmp)
                         icIdx = BadICs_tmp(i);
-                        if EEG.etc.ic_classification.ICLabel.classifications(icIdx, 1) <= 0.7
+                        if EEG.etc.ic_classification.ICLabel.classifications(icIdx, 1) <= R.FASTERExludeTreshold
                             BadICs.FASTER = [BadICs.FASTER, icIdx];
                         end
                     end
@@ -231,7 +232,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
             end
 
             if ~isempty(BadICs.FASTER)
-                logPrint('[remove_bad_ICs] FASTER identified %d bad ICs. Generating property plots...', length(BadICs.FASTER));
+                logPrint(R.LogFile, sprintf('[remove_bad_ICs] FASTER identified %d bad ICs. Generating property plots...', length(BadICs.FASTER)));
                 for i = 1:length(BadICs.FASTER)
                     icIdx = BadICs.FASTER(i);
                     pop_prop(EEG, 0, icIdx, NaN, {'freqrange', [2 40]});
@@ -239,19 +240,19 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                     close(gcf);
                 end
             else
-                logPrint('[remove_bad_ICs] FASTER found no bad ICs.');
+                logPrint(R.LogFile, '[remove_bad_ICs] FASTER found no bad ICs.');
             end
         end
 
         %% --------- ECG Correlation Detection ----------
         if R.DetectECG
-            logPrint('[remove_bad_ICs] Running ECG correlation detection...');
+            logPrint(R.LogFile, '[remove_bad_ICs] Running ECG correlation detection...');
             ecg_data = R.ECG_Struct.data; % Use the separate ECG EEG structure's data
             correlations = corr(EEG.icaact', ecg_data');
             BadICs.ECG = find(abs(correlations) > R.ECGCorrelationThreshold)';
 
             if ~isempty(BadICs.ECG)
-                logPrint('[remove_bad_ICs] ECG correlation identified %d bad ICs. Generating property plots...', length(BadICs.ECG));
+                logPrint(R.LogFile, sprintf('[remove_bad_ICs] ECG correlation identified %d bad ICs. Generating property plots...', length(BadICs.ECG)));
                 for i = 1:length(BadICs.ECG)
                     icIdx = BadICs.ECG(i);
                     pop_prop(EEG, 0, icIdx, NaN, {'freqrange', [2 40]});
@@ -259,7 +260,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                     close(gcf);
                 end
             else
-                logPrint('[remove_bad_ICs] ECG correlation found no bad ICs.');
+                logPrint(R.LogFile, '[remove_bad_ICs] ECG correlation found no bad ICs.');
             end
         end
 
@@ -268,7 +269,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         EEG.reject.gcompreject(BadICs.all) = 1;
 
         if ~isempty(BadICs.all)
-            logPrint('[remove_bad_ICs] Total unique bad ICs identified: %d. Generating visualization plots...', length(BadICs.all));
+            logPrint(R.LogFile, sprintf('[remove_bad_ICs] Total unique bad ICs identified: %d. Generating visualization plots...', length(BadICs.all)));
             nComps = size(EEG.icaweights, 1);
             for i = 1:ceil(nComps / 35)
                 startIdx = (i-1)*35 + 1;
@@ -277,12 +278,12 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                 batch_saveas(gcf, fullfile(R.LogPath, sprintf('%s_reject_p%d.png', icaLabel, i)));
                 close(gcf);
             end
-            logPrint('[remove_bad_ICs] Removing %d bad ICs...', length(BadICs.all));
+            logPrint(R.LogFile, sprintf('[remove_bad_ICs] Removing %d bad ICs...', length(BadICs.all)));
             EEG = pop_subcomp(EEG, BadICs.all, 0);
             EEG = eeg_checkset(EEG);
-            logPrint('[remove_bad_ICs] Bad ICs removed successfully.');
+            logPrint(R.LogFile, '[remove_bad_ICs] Bad ICs removed successfully.');
         else
-            logPrint('[remove_bad_ICs] No bad ICs to remove.');
+            logPrint(R.LogFile, '[remove_bad_ICs] No bad ICs to remove.');
         end
 
         %% --------- Bookkeeping and Logging ----------

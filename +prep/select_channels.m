@@ -36,7 +36,7 @@ function EEG = select_channels(EEG, varargin)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.select_channels, ...
 %       'ChanLabels', {'Fp1', 'Fp2', 'Fz'}, ...
-%       'LogFile', p.logFile); % p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); % p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('Specific frontal channels selected via pipeline.');
 %

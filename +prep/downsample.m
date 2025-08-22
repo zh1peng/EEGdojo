@@ -22,10 +22,10 @@ function [EEG, out] = downsample(EEG, varargin)
 %   EEG = downsample(EEG, 'freq', 128);
 %
 %   % 2. Usage within a pipeline:
-%   %    (Assuming 'p' is a parameter structure containing 'p.logFile')
+%   %    (Assuming 'p' is a parameter structure containing 'p.LogFile')
 %   pipe = pipe.addStep(@prep.downsample, ...
 %       'freq', 250, ...
-%       'LogFile', p.logFile);
+%       'LogFile', p.LogFile);
 %
 % See also: pop_resample
 

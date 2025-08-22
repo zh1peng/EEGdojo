@@ -37,7 +37,7 @@ function EEG = remove_channels(EEG, varargin)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.remove_channels, ...
 %       'ChanLabels', {'EOG1', 'EOG2', 'ECG'}, ...
-%       'LogFile', p.logFile); % p.logFile from pipeline parameters
+%       'LogFile', p.LogFile); % p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('EOG and ECG channels removed via pipeline.');
 %
@@ -52,7 +52,7 @@ function EEG = remove_channels(EEG, varargin)
 
     p.parse(EEG, varargin{:});
     R = p.Results;
-; 
+
     if isempty(R.ChanIdx) && isempty(R.ChanLabels)
         logPrint(R.LogFile, '[remove_channels] No channels specified for removal. Skipping.');
         return;
