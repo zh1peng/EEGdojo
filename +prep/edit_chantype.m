@@ -12,11 +12,11 @@ function [EEG, out] = edit_chantype(EEG, varargin)
 %   EEG         - EEGLAB EEG structure.
 %
 % Optional Parameters (Name-Value Pairs):
-%   'EOGLabels'   - (cell array of strings, default: {})
+%   'EOGLabel'   - (cell array of strings, default: {})
 %                     Labels of channels to be classified as Electrooculogram (EOG).
-%   'ECGLabels'   - (cell array of strings, default: {})
+%   'ECGLabel'   - (cell array of strings, default: {})
 %                     Labels of channels to be classified as Electrocardiogram (ECG).
-%   'OtherLabels' - (cell array of strings, default: {})
+%   'OtherLabel' - (cell array of strings, default: {})
 %                     Labels of channels to be classified as 'OTHER'.
 %   'LogFile'     - (char | string, default: '')
 %                     Path to the log file for recording processing information.
@@ -32,17 +32,17 @@ function [EEG, out] = edit_chantype(EEG, varargin)
 %   % Example 1: Classify EOG, ECG, and other channels (without pipeline)
 %   % Load an EEG dataset first, e.g., EEG = pop_loadset('eeg_data.set');
 %   EEG_typed = prep.edit_chantype(EEG, ...
-%       'EOGLabels', {'VEOG', 'HEOG'}, ...
-%       'ECGLabels', {'ECG1'}, ...
-%       'OtherLabels', {'TRIG'});
+%       'EOGLabel', {'VEOG', 'HEOG'}, ...
+%       'ECGLabel', {'ECG1'}, ...
+%       'OtherLabel', {'TRIG'});
 %   disp('Channel types updated.');
 %
 %   % Example 2: Usage within a pipeline
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.edit_chantype, ...
-%       'EOGLabels', {'VEOG', 'HEOG'}, ...
-%       'ECGLabels', {'ECG1'}, ...
-%       'OtherLabels', {'TRIG'}, ...
+%       'EOGLabel', {'VEOG', 'HEOG'}, ...
+%       'ECGLabel', {'ECG1'}, ...
+%       'OtherLabel', {'TRIG'}, ...
 %       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('Channel types updated via pipeline.');
@@ -52,9 +52,9 @@ function [EEG, out] = edit_chantype(EEG, varargin)
     % ----------------- Parse inputs -----------------
     p = inputParser;
     p.addRequired('EEG', @isstruct);
-    p.addParameter('EOGLabels', {}, @iscellstr);
-    p.addParameter('ECGLabels', {}, @iscellstr);
-    p.addParameter('OtherLabels', {}, @iscellstr);
+    p.addParameter('EOGLabel', {}, @iscellstr);
+    p.addParameter('ECGLabel', {}, @iscellstr);
+    p.addParameter('OtherLabel', {}, @iscellstr);
     p.addParameter('LogFile', '', @(s) ischar(s) || isstring(s));
 
     p.parse(EEG, varargin{:});
@@ -71,36 +71,36 @@ function [EEG, out] = edit_chantype(EEG, varargin)
     end
 
     % Set EOG channel types
-    [eog_idx, eog_not_found] = chans2idx(EEG, R.EOGLabels, 'MustExist', false); % Added 'MustExist', false
+    [eog_idx, eog_not_found] = chans2idx(EEG, R.EOGLabel, 'MustExist', false); % Added 'MustExist', false
     for i = 1:length(eog_idx)
         EEG.chanlocs(eog_idx(i)).type = 'EOG';
     end
     if ~isempty(eog_idx)
-        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to EOG: %s', length(eog_idx), strjoin(R.EOGLabels, ', ')));
+        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to EOG: %s', length(eog_idx), strjoin(R.EOGLabel, ', ')));
     end
     if ~isempty(eog_not_found)
         logPrint(R.LogFile, sprintf('[edit_chantype] Warning: EOG labels not found: %s', strjoin(eog_not_found, ', ')));
     end
 
     % Set ECG channel types
-    [ecg_idx, ecg_not_found] = chans2idx(EEG, R.ECGLabels, 'MustExist', false); % Added 'MustExist', false
+    [ecg_idx, ecg_not_found] = chans2idx(EEG, R.ECGLabel, 'MustExist', false); % Added 'MustExist', false
     for i = 1:length(ecg_idx)
         EEG.chanlocs(ecg_idx(i)).type = 'ECG';
     end
     if ~isempty(ecg_idx)
-        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to ECG: %s', length(ecg_idx), strjoin(R.ECGLabels, ', ')));
+        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to ECG: %s', length(ecg_idx), strjoin(R.ECGLabel, ', ')));
     end
     if ~isempty(ecg_not_found)
         logPrint(R.LogFile, sprintf('[edit_chantype] Warning: ECG labels not found: %s', strjoin(ecg_not_found, ', ')));
     end
 
     % Set OTHER channel types
-    [other_idx, other_not_found] = chans2idx(EEG, R.OtherLabels, 'MustExist', false); % Added 'MustExist', false
+    [other_idx, other_not_found] = chans2idx(EEG, R.OtherLabel, 'MustExist', false); % Added 'MustExist', false
     for i = 1:length(other_idx)
         EEG.chanlocs(other_idx(i)).type = 'OTHER';
     end
     if ~isempty(other_idx)
-        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to OTHER: %s', length(other_idx), strjoin(R.OtherLabels, ', ')));
+        logPrint(R.LogFile, sprintf('[edit_chantype] Set %d channels to OTHER: %s', length(other_idx), strjoin(R.OtherLabel, ', ')));
     end
     if ~isempty(other_not_found)
         logPrint(R.LogFile, sprintf('[edit_chantype] Warning: OTHER labels not found: %s', strjoin(other_not_found, ', ')));

@@ -1,15 +1,16 @@
 Params=struct;
 
 %% General I/O and Logging parameters
-Params.IO.filename=''; % Example: 'sub-NDARAD481FXF_task-RestingState_eeg.set';
-Params.IO.filepath=''; % Example: 'V:\HBN_EEG_BIDS\cmi_bids_NC\sub-NDARAD481FXF\eeg';
-Params.IO.outputpath=''; % Example: 'X:\HBN_EEG_preprocessing\code\test';
+Params.Input.filename=''; % Example: 'sub-NDARAD481FXF_task-RestingState_eeg.set';
+Params.Input.filename = '';
+Params.Output.filepath = '';
+
 
 %% Channel information we only use label as using idx is very risky when there are removel of channels
 
-Params.ChanInfo.RefChanLabels = {}; % Reference channel index (if applicable)
-Params.ChanInfo.EOGChanLabels = {'VEOU','VEOL','HEOR','HEOL'}; % Labels of EOG channels (e.g., {'VEOG', 'HEOG'})
-Params.ChanInfo.KnownBadChanLabels = {}; % Labels of channels known to be bad
+Params.ChanInfo.RefChanLabel = {}; % Reference channel index (if applicable)
+Params.ChanInfo.EOGChanLabel = {'VEOU','VEOL','HEOR','HEOL'}; % Labels of EOG channels (e.g., {'VEOG', 'HEOG'})
+Params.ChanInfo.KnownBadChanLabel = {}; % Labels of channels known to be bad
 Params.ChanInfo.Chan2remove = {}; % Channels to remove (e.g., {'ref''} 
 Params.ChanInfo.ECGChanLabel = 'ECG';
 Params.ChanInfo.OtherChanLabel = {};
@@ -17,10 +18,10 @@ Params.ChanInfo.OtherChanLabel = {};
 %% continuse data
 Params.Crop.StartMarker = '1'; 
 Params.Crop.EndMarker   = '2';
-Params.Crop.PadTime     = 0.5;  
+Params.Crop.PadSec     = 0.2;  
 
 %% Downsampling and filtering parameters
-Params.DownsamplingRate = 250; % Target downsampling rate in Hz
+Params.Downsample.Rate = 250; % Target downsampling rate in Hz
 Params.Filter.LowCutoff = 0.1; % High-pass filter cutoff in Hz
 Params.Filter.HighCutoff = 40; % Low-pass filter cutoff in Hz
 
@@ -31,9 +32,9 @@ Params.Powerline.BW = 2; % Half-bandwidth for FIR notch filter (only for 'notch'
 Params.Powerline.NHarm = 3; % Number of harmonics to target
 
 % Bad channel detection parameters (prep.remove_bad_channels)
-Params.BadChan.ExcludeLabel = [Params.ChanInfo.EOGChanLabels, Params.ChanInfo.RefChanLabels, Params.ChanInfo.OtherChanLabel, Params.ChanInfo.ECGChanLabel]; % Channels to consider for detection
+Params.BadChan.ExcludeLabel = [Params.ChanInfo.EOGChanLabel, Params.ChanInfo.RefChanLabel, Params.ChanInfo.OtherChanLabel, Params.ChanInfo.ECGChanLabel]; % Channels to consider for detection
 Params.BadChan.Action = 'remove'; % 'remove' or 'flag'
-Params.BadChan.KnownBadLabel = Params.ChanInfo.KnownBadChanLabels; % Indices of channels already known to be bad
+Params.BadChan.KnownBadLabel = Params.ChanInfo.KnownBadChanLabel; % Indices of channels already known to be bad
 
 % Classic EEGLAB detectors (pop_rejchan)
 Params.BadChan.Kurtosis = false; % Enable kurtosis-based detection
@@ -64,7 +65,7 @@ Params.BadChan.CleanChan_MaxBad = 0.5; % Maximum proportion of bad time points f
 Params.BadChan.CleanChan_NSamp = 50; % Number of samples for CleanRaw noise
 
 %% Re-referencing parameters (prep.reref)
-Params.Reref.excludeLabels = {}; % Channels to exclude from average reference
+Params.Reref.ExcludeLabel = {}; % Channels to exclude from average reference
 
 %% ICA parameters (prep.remove_bad_ICs)
 Params.BadIC.FilterICAOn = true; % Apply high-pass filter before ICA
@@ -73,10 +74,11 @@ Params.BadIC.ICAType = 'runica'; % Type of ICA algorithm
 Params.BadIC.ICLabelOn = true; % Enable ICLabel classification
 Params.BadIC.ICLabelThreshold = [NaN NaN; 0.7 1; 0.7 1; 0.7 1; 0.7 1; 0.7 1; NaN NaN]; % ICLabel thresholds
 Params.BadIC.FASTEROn = true; % Enable FASTER component property analysis
-Params.BadIC.FASTERExludeTreshold = 0.7; % Exclude components with proablity of being brain signal by IClabel > threshold
+Params.BadIC.EOGChanLabel = Params.ChanInfo.EOGChanLabel;
+Params.BadIC.BrainIncludeTreshold = 0.7; % Exclude components with proablity of being brain signal by IClabel > threshold
 Params.BadIC.DetectECG = false; % Enable ECG correlation-based detection
-Params.BadIC.ECGStruct = []; % New: Placeholder for external ECG data structure
-Params.BadIC.ECGCorrelationThreshold = 0.8; % ECG correlation threshold
+Params.BadIC.ECG_Struct = []; % New: Placeholder for external ECG data structure
+Params.BadIC.ECGCorrelationThreshold = 0.65; % ECG correlation threshold
 
 
 

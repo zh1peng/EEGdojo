@@ -47,20 +47,20 @@ function [EEG, out] = reref(EEG, varargin)
 
     p = inputParser;
     p.addRequired('EEG', @isstruct);
-    p.addParameter('excludeLabels', {}, @(x) iscell(x) || ischar(x));
+    p.addParameter('ExcludeLabel', {}, @(x) iscell(x) || ischar(x));
     p.addParameter('LogFile', '', @ischar);
 
     p.parse(EEG, varargin{:});
     R = p.Results;
 
     out = struct(); % Initialize out struct
-    out.excluded_labels = R.excludeLabels;
+    out.excluded_labels = R.ExcludeLabel;
 
 
-    if ischar(R.excludeLabels)
-        excludeLabels = {R.excludeLabels};
+    if ischar(R.ExcludeLabel)
+        excludeLabels = {R.ExcludeLabel};
     else
-        excludeLabels = R.excludeLabels;
+        excludeLabels = R.ExcludeLabel;
     end
 
     log_msg = '[reref] Re-referencing data to average';

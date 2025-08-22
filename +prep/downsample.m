@@ -32,17 +32,17 @@ function [EEG, out] = downsample(EEG, varargin)
     % ----------------- Parse inputs -----------------
     p = inputParser;
     p.addRequired('EEG', @isstruct);
-    p.addParameter('freq', 250, @isnumeric);
+    p.addParameter('Rate', 250, @isnumeric);
     p.addParameter('LogFile', '', @ischar);
 
     p.parse(EEG, varargin{:});
     R = p.Results;
 
     out = struct(); % Initialize output structure
-    out.new_sampling_rate = R.freq;
+    out.new_sampling_rate = R.Rate;
 
-    logPrint(R.LogFile, sprintf('[downsample] Downsampling data to %d Hz.', R.freq));
-    EEG = pop_resample(EEG, R.freq);
+    logPrint(R.LogFile, sprintf('[downsample] Downsampling data to %d Hz.', R.Rate));
+    EEG = pop_resample(EEG, R.Rate);
     EEG = eeg_checkset(EEG); % Update EEG structure after changes
     logPrint(R.LogFile, sprintf('[downsample] Downsampling complete. New sampling rate: %d Hz.', EEG.srate));
     out.new_sampling_rate = EEG.srate; % Ensure output reflects actual srate

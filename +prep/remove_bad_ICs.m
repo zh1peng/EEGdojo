@@ -46,7 +46,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 %   %% FASTER Parameters
 %   'FASTEROn'              - (logical, default: true)
 %                             Enable FASTER component property analysis for IC rejection.
-%   'EOGChanLabels'         - (cell array of strings, default: {})
+%   'EOGChanLabel'         - (cell array of strings, default: {})
 %                             Cell array of channel labels corresponding to EOG
 %                             channels (e.g., {'VEOG', 'HEOG'}). These labels are used to identify EOG channels for FASTER analysis. If empty, FASTER EOG detection will be skipped.
 %
@@ -72,7 +72,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 %   % Or set 'FilterICAOn', true to compute ICA within this function.
 %   [EEG_cleaned, ic_info] = prep.remove_bad_ICs(EEG, ...
 %       'ICLabelOn', true, 'ICLabelThreshold', [0 0.1; 0.9 1], ...
-%       'FASTEROn', true, 'EOGChanLabels', {'VEOG', 'HEOG'}, ...
+%       'FASTEROn', true, 'EOGChanLabel', {'VEOG', 'HEOG'}, ...
 %       'LogPath', 'C:\temp\eeg_logs', 'LogFile', 'bad_ics_report');
 %   disp('Total bad ICs removed:');
 %   disp(ic_info.BadICs.all);
@@ -118,8 +118,8 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 
     % FASTER parameters
     p.addParameter('FASTEROn', true, @islogical);
-    p.addParameter('FASTERExludeTreshold', 0.7, @(x) isnumeric(x) && isscalar(x) && x > 0 && x <= 1);
-    p.addParameter('EOGChanLabels', {}, @iscellstr);
+    p.addParameter('BrainIncludeTreshold', 0.7, @(x) isnumeric(x) && isscalar(x) && x > 0 && x <= 1);
+    p.addParameter('EOGChanLabel', {}, @iscellstr);
 
     % ECG detection parameters
     p.addParameter('DetectECG', true, @islogical);
@@ -142,9 +142,9 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
 
         % Find EOG channels based on provided labels
         EOGChan = [];
-        if ~isempty(R.EOGChanLabels)
-            for i = 1:length(R.EOGChanLabels)
-                idx = find(strcmp({EEG.chanlocs.labels}, R.EOGChanLabels{i}), 1);
+        if ~isempty(R.EOGChanLabel)
+            for i = 1:length(R.EOGChanLabel)
+                idx = find(strcmp({EEG.chanlocs.labels}, R.EOGChanLabel{i}), 1);
                 if ~isempty(idx)
                     EOGChan = [EOGChan, idx];
                 end
@@ -222,7 +222,7 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                 if ~isempty(BadICs_tmp)
                     for i = 1:length(BadICs_tmp)
                         icIdx = BadICs_tmp(i);
-                        if EEG.etc.ic_classification.ICLabel.classifications(icIdx, 1) <= R.FASTERExludeTreshold
+                        if EEG.etc.ic_classification.ICLabel.classifications(icIdx, 1) <= R.BrainIncludeTreshold
                             BadICs.FASTER = [BadICs.FASTER, icIdx];
                         end
                     end
@@ -247,9 +247,49 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
         %% --------- ECG Correlation Detection ----------
         if R.DetectECG
             logPrint(R.LogFile, '[remove_bad_ICs] Running ECG correlation detection...');
-            ecg_data = R.ECG_Struct.data; % Use the separate ECG EEG structure's data
-            correlations = corr(EEG.icaact', ecg_data');
-            BadICs.ECG = find(abs(correlations) > R.ECGCorrelationThreshold)';
+
+            % --- shapes & alignment checks ---
+            % EEG.icaact: [nIC x T]
+            % ecg_data:   [nECG x T]  (from R.ECG_Struct.data)
+            if size(EEG.icaact, 2) ~= size(R.ECG_Struct.data, 2)
+                error('[remove_bad_ICs] ECG and ICA time lengths differ: IC T=%d, ECG T=%d.', ...
+                    size(EEG.icaact,2), size(R.ECG_Struct.data,2));
+            end
+
+            X = double(EEG.icaact);          % [nIC x T]
+            E = double(R.ECG_Struct.data);   % [nECG x T]
+
+            % Z-score along time to handle offset/scale; NaNs for zero-variance rows
+            Xz = zscore(X, 0, 2);
+            Ez = zscore(E, 0, 2);
+
+            % Replace NaNs (flat channels/components) with 0 so they don’t contribute
+            Xz(~isfinite(Xz)) = 0;
+            Ez(~isfinite(Ez)) = 0;
+
+            % Correlation of standardized series: (Xz * Ez')/(T-1)
+            T  = size(Xz, 2);
+            Rm = (Xz * Ez.') / max(T - 1, 1);     % [nIC x nECG]
+            Rabs = abs(Rm);
+
+            % Decide bad ICs: max |r| across ECG channels
+            rmax = max(Rabs, [], 2);              % [nIC x 1]
+            bad_mask = rmax > R.ECGCorrelationThreshold;
+            BadICs_tmp1 = find(bad_mask).';        % row vector of IC indices
+
+            if R.ICLabelOn
+                BadICs.ECG  = [];
+                if ~isempty(BadICs_tmp1)
+                    for i = 1:length(BadICs_tmp1)
+                        icIdx = BadICs_tmp1(i);
+                        if EEG.etc.ic_classification.ICLabel.classifications(icIdx, 1) <= R.BrainIncludeTreshold
+                            BadICs.ECG = [BadICs.ECG, icIdx];
+                        end
+                    end
+                end
+            else
+                BadICs.ECG = BadICs_tmp1;
+            end
 
             if ~isempty(BadICs.ECG)
                 logPrint(R.LogFile, sprintf('[remove_bad_ICs] ECG correlation identified %d bad ICs. Generating property plots...', length(BadICs.ECG)));
@@ -263,6 +303,10 @@ function [EEG, out] = remove_bad_ICs(EEG, varargin)
                 logPrint(R.LogFile, '[remove_bad_ICs] ECG correlation found no bad ICs.');
             end
         end
+
+
+
+
 
         %% --------- Combine, Visualize, and Remove ----------
         BadICs.all = unique([BadICs.IClabel, BadICs.FASTER, BadICs.ECG]);

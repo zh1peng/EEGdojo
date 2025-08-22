@@ -14,9 +14,9 @@ function EEG = remove_channels(EEG, varargin)
 % Optional Parameters (Name-Value Pairs):
 %   'ChanIdx'       - (numeric array, default: [])
 %                     Numerical indices of channels to remove.
-%   'ChanLabels'    - (cell array of strings, default: {})
+%   'Chan2remove'    - (cell array of strings, default: {})
 %                     Labels of channels to remove (e.g., {'Cz', 'Fz'}).
-%                     If both 'ChanIdx' and 'ChanLabels' are provided,
+%                     If both 'ChanIdx' and 'Chan2remove' are provided,
 %                     channels specified by both will be removed.
 %   'LogFile'       - (char | string, default: '')
 %                     Path to a log file for verbose output. If empty, output
@@ -36,7 +36,7 @@ function EEG = remove_channels(EEG, varargin)
 %   % Example 2: Remove channels by label (with pipeline)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.remove_channels, ...
-%       'ChanLabels', {'EOG1', 'EOG2', 'ECG'}, ...
+%       'Chan2remove', {'EOG1', 'EOG2', 'ECG'}, ...
 %       'LogFile', p.LogFile); % p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('EOG and ECG channels removed via pipeline.');
@@ -47,13 +47,13 @@ function EEG = remove_channels(EEG, varargin)
     p = inputParser;
     p.addRequired('EEG', @isstruct);
     p.addParameter('ChanIdx', [], @(x) isnumeric(x) && isvector(x));
-    p.addParameter('ChanLabels', {}, @(x) iscellstr(x) || ischar(x));
+    p.addParameter('Chan2remove', {}, @(x) iscellstr(x) || ischar(x));
     p.addParameter('LogFile', '', @(s) ischar(s) || isstring(s));
 
     p.parse(EEG, varargin{:});
     R = p.Results;
 
-    if isempty(R.ChanIdx) && isempty(R.ChanLabels)
+    if isempty(R.ChanIdx) && isempty(R.Chan2remove)
         logPrint(R.LogFile, '[remove_channels] No channels specified for removal. Skipping.');
         return;
     end
@@ -65,17 +65,17 @@ function EEG = remove_channels(EEG, varargin)
         logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by index: %s', num2str(R.ChanIdx)));
     end
 
-    if ~isempty(R.ChanLabels)
-        if ischar(R.ChanLabels)
-            R.ChanLabels = {R.ChanLabels};
+    if ~isempty(R.Chan2remove)
+        if ischar(R.Chan2remove)
+            R.Chan2remove = {R.Chan2remove};
         end
         % Changed call to chans2idx to use explicit name-value pair
-        idx_from_labels = chans2idx(EEG, R.ChanLabels, 'MustExist', false); 
+        idx_from_labels = chans2idx(EEG, R.Chan2remove, 'MustExist', false); 
         if ~isempty(idx_from_labels)
             channels_to_remove_idx = [channels_to_remove_idx, idx_from_labels];
-            logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by label: %s (indices: %s)', strjoin(R.ChanLabels, ', '), num2str(idx_from_labels)));
+            logPrint(R.LogFile, sprintf('[remove_channels] Channels to remove by label: %s (indices: %s)', strjoin(R.Chan2remove, ', '), num2str(idx_from_labels)));
         else
-            logPrint(R.LogFile, sprintf('[remove_channels] No channels found for labels: %s', strjoin(R.ChanLabels, ', ')));
+            logPrint(R.LogFile, sprintf('[remove_channels] No channels found for labels: %s', strjoin(R.Chan2remove, ', ')));
         end
     end
 

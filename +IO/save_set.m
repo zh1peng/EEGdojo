@@ -12,11 +12,8 @@ function [EEG, out] = save_set(EEG, varargin)
     p.parse(varargin{:});
     R = p.Results;
 
-    logPrint(R.LogFile, sprintf('[save_set] --- Saving dataset: %s/%s ---', R.filepath, R.filename)); % Added logPrint and prefix
-
+    logPrint(R.LogFile, sprintf('[save_set] Saving dataset: %s/%s', R.filepath, R.filename)); % Added logPrint and prefix
     pop_saveset(EEG, 'filename', R.filename, 'filepath', R.filepath);
     out = struct('savedFile', fullfile(R.filepath, R.filename));
-    logPrint(R.LogFile, sprintf('[save_set] --- Dataset saved: %s/%s ---', R.filepath, R.filename)); % Added prefix
-
-    
+    logPrint(R.LogFile, sprintf('[save_set] Dataset saved: %s/%s', R.filepath, R.filename)); % Added prefix
 end
