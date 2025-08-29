@@ -18,8 +18,8 @@ function [EEG, out] = segment_task(EEG, varargin)
 %                     around which to create epochs.
 %   'TimeWindow'    - (numeric array [start_time end_time], default: [])
 %                     A two-element numeric array specifying the time window
-%                     for epoch extraction, relative to the event marker, in seconds.
-%                     E.g., [-0.5 1.5] means from 500 ms before to 1500 ms after the marker.
+%                     for epoch extraction, relative to the event marker, in milliseconds.
+%                     E.g., [-500 1500] means from 500 ms before to 1500 ms after the marker.
 %   'LogFile'       - (char | string, default: '')
 %                     Path to a log file for verbose output. If empty, output
 %                     is directed to the command window.
@@ -38,7 +38,7 @@ function [EEG, out] = segment_task(EEG, varargin)
 %   % Load a continuous EEG dataset with events, e.g., EEG = pop_loadset('task_eeg.set');
 %   [EEG_epoched, seg_info] = prep.segment_task(EEG, ...
 %       'Markers', {'stim_on', 'resp'}, ...
-%       'TimeWindow', [-0.2 0.8], ...
+%       'TimeWindow', [-200 800], ...
 %       'LogFile', 'task_segmentation_log.txt');
 %   disp('Task data segmented.');
 %   disp('Epochs created per marker:');
@@ -49,7 +49,7 @@ function [EEG, out] = segment_task(EEG, varargin)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.segment_task, ...
 %       'Markers', {'trial_start'}, ...
-%       'TimeWindow', [-1 2], ...
+%       'TimeWindow', [-1000 2000], ...
 %       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
 %   disp('Task data segmented via pipeline.');
@@ -74,13 +74,14 @@ function [EEG, out] = segment_task(EEG, varargin)
         return;
     end
 
+    timeWindow_sec = R.TimeWindow / 1000;
 
     logPrint(R.LogFile, '[segment_task] ------ Segmenting task data ------');
-    logPrint(R.LogFile, sprintf('[segment_task] Markers: %s, Time window: [%.2f %.2f]s', strjoin(R.Markers, ', '), R.TimeWindow(1), R.TimeWindow(2)));
+    logPrint(R.LogFile, sprintf('[segment_task] Markers: %s, Time window: [%.2f %.2f]s', strjoin(R.Markers, ', '), timeWindow_sec(1), timeWindow_sec(2)));
 
     % Segment the data into epochs
     logPrint(R.LogFile, '[segment_task] Calling pop_epoch to segment data...');
-    EEG = pop_epoch(EEG, R.Markers, R.TimeWindow, 'epochinfo', 'yes');
+    EEG = pop_epoch(EEG, R.Markers, timeWindow_sec, 'epochinfo', 'yes');
     
     % Log the number of epochs for each marker type
     unique_markers = unique(R.Markers);

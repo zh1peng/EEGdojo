@@ -14,8 +14,8 @@ function [EEG, out] = segment_rest(EEG, varargin)
 %   EEG         - EEGLAB EEG structure (continuous data).
 %
 % Optional Parameters (Name-Value Pairs):
-%   'EpochLength'   - (numeric, default: 2)
-%                     The desired length of each epoch in seconds.
+%   'EpochLength'   - (numeric, default: 2000)
+%                     The desired length of each epoch in milliseconds.
 %   'EpochOverlap'  - (numeric, default: 0.5)
 %                     The desired overlap between consecutive epochs, as a
 %                     proportion (0 to <1). For example, 0.5 means 50% overlap.
@@ -30,18 +30,18 @@ function [EEG, out] = segment_rest(EEG, varargin)
 %                 out.epochs_created: The number of epochs created.
 %
 % Examples:
-%   % Example 1: Segment continuous EEG into 2-second epochs with 50% overlap (without pipeline)
+%   % Example 1: Segment continuous EEG into 2000ms epochs with 50% overlap (without pipeline)
 %   % Load a continuous EEG dataset first, e.g., EEG = pop_loadset('continuous_eeg.set');
 %   [EEG_epoched, seg_info] = prep.segment_rest(EEG, ...
-%       'EpochLength', 2, ...
+%       'EpochLength', 2000, ...
 %       'EpochOverlap', 0.5, ...
 %       'LogFile', 'segmentation_log.txt');
 %   disp(['Created ', num2str(seg_info.epochs_created), ' epochs.']);
 %
-%   % Example 2: Segment into 4-second epochs with 25% overlap (with pipeline)
+%   % Example 2: Segment into 4000ms epochs with 25% overlap (with pipeline)
 %   % Assuming 'pipe' is an initialized pipeline object
 %   pipe = pipe.addStep(@prep.segment_rest, ...
-%       'EpochLength', 4, ...
+%       'EpochLength', 4000, ...
 %       'EpochOverlap', 0.25, ...
 %       'LogFile', p.LogFile); %% p.LogFile from pipeline parameters
 %   % Then run the pipeline: [EEG_processed, results] = pipe.run(EEG);
@@ -52,7 +52,7 @@ function [EEG, out] = segment_rest(EEG, varargin)
     % ----------------- Parse inputs -----------------
     p = inputParser;
     p.addRequired('EEG', @isstruct);
-    p.addParameter('EpochLength', 2, @(x) isnumeric(x) && isscalar(x) && x > 0);
+    p.addParameter('EpochLength', 2000, @(x) isnumeric(x) && isscalar(x) && x > 0);
     p.addParameter('EpochOverlap', 0.5, @(x) isnumeric(x) && isscalar(x) && x >= 0 && x < 1);
     p.addParameter('LogFile', '', @(s) ischar(s) || isstring(s));
 
@@ -66,18 +66,19 @@ function [EEG, out] = segment_rest(EEG, varargin)
         return;
     end
 
+    epochLength_sec = R.EpochLength / 1000;
 
     logPrint(R.LogFile, '[segment_rest] ------ Segmenting resting-state data ------');
-    logPrint(R.LogFile, sprintf('[segment_rest] Epoch length: %.2f s, Overlap: %.2f%%', R.EpochLength, R.EpochOverlap*100));
+    logPrint(R.LogFile, sprintf('[segment_rest] Epoch length: %.2f s, Overlap: %.2f%%', epochLength_sec, R.EpochOverlap*100));
 
     % Create regularly spaced markers for epoching
     logPrint(R.LogFile, '[segment_rest] Creating regularly spaced "epoch_start" events...');
-    EEG = eeg_regepochs(EEG, 'recurrence', R.EpochLength * (1 - R.EpochOverlap), 'eventtype', 'epoch_start', 'extractepochs', 'off');
+    EEG = eeg_regepochs(EEG, 'recurrence', epochLength_sec * (1 - R.EpochOverlap), 'eventtype', 'epoch_start', 'extractepochs', 'off');
     logPrint(R.LogFile, sprintf('[segment_rest] %d "epoch_start" events created.', length(EEG.event)));
 
     % Segment the data into epochs based on the new markers
     logPrint(R.LogFile, '[segment_rest] Epoching data based on "epoch_start" events...');
-    EEG = pop_epoch(EEG, {'epoch_start'}, [0 R.EpochLength], 'epochinfo', 'yes');
+    EEG = pop_epoch(EEG, {'epoch_start'}, [0 epochLength_sec], 'epochinfo', 'yes');
 
     out.epochs_created = EEG.trials;
 

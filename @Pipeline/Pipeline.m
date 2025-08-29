@@ -7,7 +7,6 @@ classdef Pipeline < handle
         LogFile
         error_LogFile
         steps % struct array with fields: name, func, args
-        continueOnError logical = false
     end
 
     methods
@@ -39,9 +38,6 @@ classdef Pipeline < handle
             if nargin >= 3 && ~isempty(errLogFile), obj.error_LogFile = errLogFile; end
         end
 
-        function obj = setContinueOnError(obj, tf)
-            obj.continueOnError = logical(tf);
-        end
 
     function obj = addStep(obj, varargin)
         % ADDSTEP Add a processing step to the pipeline.
@@ -115,11 +111,8 @@ classdef Pipeline < handle
 
         function obj = run(obj, varargin)
             % RUN Execute steps. Options:
-            %   'continueOnError', true/false (default: obj.continueOnError)
             ip = inputParser;
-            ip.addParameter('continueOnError', obj.continueOnError, @(x)islogical(x)&&isscalar(x));
             ip.parse(varargin{:});
-            contErr = ip.Results.continueOnError;
 
             t1 = tic;
             for i = 1:numel(obj.steps)
@@ -136,12 +129,7 @@ classdef Pipeline < handle
                     logPrint(obj.LogFile, sprintf('[Step %s] completed in %.2fs', stepName, dt));
                 catch ME
                     logPrint(obj.error_LogFile, sprintf('*** ERROR in %s: %s ***', stepName, ME.message));
-                    if contErr
-                        % Keep going; mark in log
-                        logPrint(obj.LogFile, sprintf('!!! Continuing after error in %s', stepName));
-                    else
-                        rethrow(ME);
-                    end
+                    return;
                 end
             end
             t2 = toc(t1);

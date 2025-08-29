@@ -178,6 +178,7 @@ function [EEG, out] = remove_bad_channels(EEG, varargin)
     if ~exist(R.LogPath,'dir')&~isempty(R.LogPath), mkdir(R.LogPath); end
 
     % Preserve original channel locations
+    EEG.urchanlocs=[];
     [EEG.urchanlocs] = deal(EEG.chanlocs);
     EEG.chaninfo.nodatchans = [];
 
