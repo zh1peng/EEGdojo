@@ -1,72 +1,129 @@
-function Out = extract_study_epoch(varargin)
+function Out = extract_epoch(varargin)
 % EXTRACT_STUDY_EPOCH  Build a single study-level epoch container from many EEGLAB .set files.
+%   This function automates the process of finding EEGLAB .set files, applying
+%   a series of optional preprocessing steps (filtering, resampling, etc.),
+%   and extracting epochs around specified event markers. The result is a
+%   single, well-structured MATLAB struct that is easy to analyze.
 %
-% Scans for .set files, optionally pre-processes (reference/filter/resample),
-% epochs for given markers, applies baseline (if provided), and returns a flat
-% container:
+% Output Structure:
+%   The output is a single struct `Out` with two main components:
+%   1. Out.meta: A struct containing shared information across all subjects
+%      and conditions. This includes:
+%       .fs              - Sampling rate of the processed data.
+%       .srate           - (Same as fs) Sampling rate.
+%       .times           - A vector of time points for the epochs (in ms).
+%       .chanlocs        - Channel locations structure from the first subject.
+%       .epoch_window_ms - The [start, end] time window used for epoching.
+%       .baseline_ms     - The [start, end] time window used for baseline correction.
+%       .conditions      - A cell array of condition names.
+%       .trialN          - A table summarizing trial counts per subject/condition.
+%       .created_at      - Timestamp of when the extraction was run.
+%       .run_tag         - A user-defined tag for this specific extraction run.
 %
-%   Out.meta   : shared info (fs, times, chanlocs, epoch/baseline window, conditions, preproc, run_tag)
-%   Out.<sub>  : fields for each condition only (data matrices, chan × time × trial)
-%                e.g., Out.sub_101.x10, Out.sub_101.x20, ...
+%   2. Out.sub_...: A series of dynamically named fields for each subject
+%      (e.g., Out.sub_001, Out.sub_S02). Each subject field is itself a struct
+%      containing data for each condition, for example:
+%       .x_cond1 (e.g. .x_target) - A [channels x time x trials] matrix.
+%       .x_cond2 (e.g. .x_nontarget) - Another data matrix for a different condition.
 %
-% Name–Value parameters (all optional unless noted):
-%   'study_path'     : (char) root dir containing .set files (REQUIRED)
-%   'searchstring'   : (char) regex for filenames (default '.*\.set$')
-%   'recursive'      : (logical) recurse subfolders (default true)
-%   'subject_parser' : (char) regex with named token 'sub' (and optional 'ses') (default '(?<sub>.+)')
-%   'markers'        : (cellstr/string) event codes to epoch (REQUIRED)
-%   'aliases'        : (2-col cell) {marker, condition}; omitted -> condition == lower(marker)
-%   'epoch_window'   : (1x2 double) ms, e.g. [-1000 2000] (default)
-%   'baseline'       : (1x2 double or []) ms; [] to skip (default [])
-%   'filter_hp'      : (scalar or []) high‑pass Hz; [] skip
-%   'filter_lp'      : (scalar or []) low‑pass Hz; [] skip
-%   'resample'       : (scalar or []) target Hz; [] keep original
-%   'reference'      : (char) 'avg' | 'none' (default 'none')
-%   'to_single'      : (logical) cast to single (default false)
-%   'save_path'      : (char) optional output .mat path
-%   'save_v7_3'      : (logical) save with -v7.3 (default true)
-%   'run_tag'        : (char) tag written into Out.meta (default timestamp)
+% Name-Value Pair Arguments:
+%   'study_path' (char, REQUIRED)
+%       The absolute path to the root directory containing the .set files.
+%
+%   'markers' (cellstr/string, REQUIRED)
+%       A cell array of event marker strings to epoch around (e.g., {'S 10', 'S 20'}).
+%
+%   'searchstring' (char, default: '.*\.set$')
+%       A regular expression to find specific .set files within the study_path.
+%
+%   'recursive' (logical, default: true)
+%       If true, searches for files in subdirectories of study_path.
+%
+%   'subject_parser' (char, default: '(?<sub>.+)')
+%       A regular expression with a named token '(?<sub>...)' to extract a unique
+%       subject ID from each filename. An optional '(?<ses>...)' token can also be used.
+%
+%   'chan_include' (cellstr/string, default: {})
+%       A list of channel labels to *include*. All other channels will be removed.
+%       Cannot be used at the same time as 'chan_exclude'.
+%
+%   'chan_exclude' (cellstr/string, default: {})
+%       A list of channel labels to *exclude*. All other channels will be kept.
+%       Cannot be used at the same time as 'chan_include'.
+%
+%   'aliases' (2-column cell, default: [])
+%       A mapping to rename markers to more readable condition names.
+%       Example: {'S 10', 'target'; 'S 20', 'nontarget'}.
+%
+%   'epoch_window' (1x2 double, default: [-1000 2000])
+%       The time window in milliseconds [start, end] relative to the event marker.
+%
+%   'baseline' (1x2 double, default: [])
+%       The baseline period in milliseconds [start, end] for pop_rmbase.
+%       If empty, baseline correction is skipped.
+%
+%   'locutoff' (scalar, default: [])
+%       High-pass filter cutoff frequency in Hz. Skips if empty.
+%
+%   'hicutoff' (scalar, default: [])
+%       Low-pass filter cutoff frequency in Hz. Skips if empty.
+%
+%   'resample' (scalar, default: [])
+%       The target sampling rate in Hz. Skips if original srate matches or if empty.
+%
+%   'reference' (char, default: 'none')
+%       Rereferencing scheme. Currently supports 'avg' for average reference.
+%
+%   'to_single' (logical, default: false)
+%       If true, casts the output data matrices to the 'single' data type to save memory.
+%
+%   'save_path' (char, default: '')
+%       If provided, the final 'Out' struct is saved to this full path.
+%
+%   'save_v7_3' (logical, default: true)
+%       If saving, use the '-v7.3' flag to support larger files. Set to false for
+%       compatibility with older MATLAB versions if data is small.
+%
+%   'run_tag' (char, default: timestamp)
+%       A custom string tag to identify this extraction run, stored in Out.meta.
 %
 % Examples:
 %
-%   % 1. Minimal example (no preprocessing, no aliases)
-%   Out = extract_study_epoch( ...
-%       'study_path','/media/NAS/EEGdata/Exp1', ...
-%       'searchstring','^sub.*\.set$', ...
-%       'markers',{'C101','C102'} );
+%   % Example 1: Basic Extraction
+%   % Extracts epochs for two markers from all .set files in a directory.
+%   Out1 = study.extract_epoch( ...
+%       'study_path', 'C:\\EEG_Data\\Study1',
+%       'markers', {'stim_A', 'stim_B'});
 %
-%   % 2. With aliases
-%   Out = extract_study_epoch( ...
-%       'study_path','/media/NAS/EEGdata/Exp1', ...
-%       'markers',{'C101','C102','C103'}, ...
-%       'aliases',{'C101','win'; 'C102','loss'; 'C103','neutral'}, ...
-%       'epoch_window',[-500 1500], ...
-%       'baseline',[-200 0] );
+%   % Example 2: Preprocessing and Aliases
+%   % Applies filtering and resampling, and renames markers to conditions.
+%   Out2 = study.extract_epoch( ...
+%       'study_path', 'C:\\EEG_Data\\Study1',
+%       'markers', {'S11', 'S12'},
+%       'aliases', {'S11', 'target'; 'S12', 'nontarget'},
+%       'locutoff', 0.5,
+%       'hicutoff', 40,
+%       'resample', 500,
+%       'baseline', [-200, 0]);
 %
-%   % 3. With preprocessing (filter + resample + reref)
-%   Out = extract_study_epoch( ...
-%       'study_path','/media/NAS/EEGdata/Exp2/qced', ...
-%       'searchstring','^qced_sub.*\.set$', ...
-%       'markers',{'stimA','stimB'}, ...
-%       'aliases',{'stimA','target'; 'stimB','nontarget'}, ...
-%       'filter_hp',0.1, ...        % high-pass 0.1 Hz
-%       'filter_lp',30, ...         % low-pass 30 Hz
-%       'resample',250, ...         % downsample to 250 Hz
-%       'reference','avg', ...      % average reference
-%       'to_single',true, ...
-%       'save_path','/media/NAS/EEGdata/Exp2/epochs_all.mat', ...
-%       'save_v7_3',true, ...
-%       'run_tag','fs250_lp30');
+%   % Example 3: Channel Selection and Saving
+%   % Extracts only 10 specified channels and saves the result.
+%   frontal_chans = {'Fp1', 'Fp2', 'Fz', 'F3', 'F4', 'F7', 'F8'};
+%   Out3 = study.extract_epoch( ...
+%       'study_path', 'C:\\EEG_Data\\Study1',
+%       'markers', {'cue'},
+%       'chan_include', frontal_chans,
+%       'save_path', 'C:\\EEG_Data\\Study1\\processed\\frontal_cue_epochs.mat',
+%       'run_tag', 'frontal_analysis_v1');
 %
-%   % 4. With subject/session parsing from filename
-%   Out = extract_study_epoch( ...
-%       'study_path','/media/NAS/EEGdata/Exp3', ...
-%       'searchstring','\.set$', ...
-%       'subject_parser','(?<sub>sub\d+)_(?<ses>s\d+)', ...
-%       'markers',{'Cue1','Cue2'}, ...
-%       'aliases',{'Cue1','left'; 'Cue2','right'});
-%
-% Requires: EEGLAB on path; your filesearch_regexp on path.
+%   % Example 4: Advanced Subject Parsing (BIDS-like)
+%   % Uses a regex to extract subject and session from BIDS-style filenames
+%   % like 'sub-01_ses-pre_task-rest_eeg.set'.
+%   Out4 = study.extract_epoch( ...
+%       'study_path', 'C:\\EEG_Data\\BIDS_Study',
+%       'searchstring', '_eeg\.set$',
+%       'subject_parser', '(?<sub>sub-\d+)_<ses>ses-\w+)', ...
+%       'markers', {'response'});
 
 %% ---- Parse Name–Value inputs
 p = inputParser; p.FunctionName = 'extract_study_epoch';
@@ -75,14 +132,17 @@ addParameter(p,'searchstring','.*\.set$',@ischar);
 addParameter(p,'recursive',true,@islogical);
 addParameter(p,'subject_parser','(?<sub>.+)',@ischar);
 
+addParameter(p,'chan_include',{},@(x)iscellstr(x) || isstring(x));
+addParameter(p,'chan_exclude',{},@(x)iscellstr(x) || isstring(x));
+
 addParameter(p,'markers',{},@(x)iscellstr(x) || isstring(x));
 addParameter(p,'aliases',[],@(x)isempty(x) || (iscell(x)&&size(x,2)==2));  % simple 2-col
 
 addParameter(p,'epoch_window',[-1000 2000],@(x)isnumeric(x)&&numel(x)==2); % ms
 addParameter(p,'baseline',[],@(x)isnumeric(x) && (isempty(x)||numel(x)==2)); % ms
 
-addParameter(p,'filter_hp',[],@(x)isempty(x)||isscalar(x));
-addParameter(p,'filter_lp',[],@(x)isempty(x)||isscalar(x));
+addParameter(p,'locutoff',[],@(x)isempty(x)||isscalar(x));
+addParameter(p,'hicutoff',[],@(x)isempty(x)||isscalar(x));
 addParameter(p,'resample',[],@(x)isempty(x)||isscalar(x));
 addParameter(p,'reference','none',@(x)ischar(x)&&~isempty(x));
 
@@ -111,11 +171,12 @@ conds = sort(unique(lower(resolveMany(markers, alias_mk, alias_cond))));
 Out = struct();
 Out.meta = struct( ...
     'fs',              [], ...
+    'srate',           [], ...
     'times',           [], ...
     'chanlocs',        [], ...
     'epoch_window_ms', opt.epoch_window, ...
     'baseline_ms',     opt.baseline, ...
-    'preproc',         struct('filter_hp',opt.filter_hp,'filter_lp',opt.filter_lp, ...
+    'preproc',         struct('locutoff',opt.locutoff,'hicutoff',opt.hicutoff, ...
                               'resample',opt.resample,'reference',opt.reference), ...
     'created_at',      datestr(now,'yyyy-mm-dd HH:MM:SS'), ...
     'run_tag',         opt.run_tag, ...
@@ -145,6 +206,19 @@ for i = 1:numel(setFiles)
     EEG = pop_loadset(fpath);
     EEG = eeg_checkset(EEG);
 
+    % ---- Channel selection
+    if ~isempty(opt.chan_include) && ~isempty(opt.chan_exclude)
+        error('Use either chan_include or chan_exclude, not both.');
+    end
+    if ~isempty(opt.chan_include)
+        EEG = pop_select(EEG, 'channel', opt.chan_include);
+        EEG = eeg_checkset(EEG);
+    end
+    if ~isempty(opt.chan_exclude)
+        EEG = pop_select(EEG, 'nochannel', opt.chan_exclude);
+        EEG = eeg_checkset(EEG);
+    end
+
     % ---- Reference (inline)
     if ~isempty(opt.reference) && ~strcmpi(opt.reference,'none')
         switch lower(opt.reference)
@@ -157,10 +231,10 @@ for i = 1:numel(setFiles)
     end
 
     % ---- Filter (inline)
-    if ( ~isempty(opt.filter_hp) && opt.filter_hp>0 ) || ( ~isempty(opt.filter_lp) && opt.filter_lp>0 )
+    if ( ~isempty(opt.locutoff) && opt.locutoff>0 ) || ( ~isempty(opt.hicutoff) && opt.hicutoff>0 )
         args = {};
-        if ~isempty(opt.filter_hp) && opt.filter_hp>0, args = [args, {'locutoff', opt.filter_hp}]; end
-        if ~isempty(opt.filter_lp) && opt.filter_lp>0, args = [args, {'hicutoff', opt.filter_lp}]; end
+        if ~isempty(opt.locutoff) && opt.locutoff>0, args = [args, {'locutoff', opt.locutoff}]; end
+        if ~isempty(opt.hicutoff) && opt.hicutoff>0, args = [args, {'hicutoff', opt.hicutoff}]; end
         EEG = pop_eegfiltnew(EEG, args{:});
         EEG = eeg_checkset(EEG);
     end
@@ -174,6 +248,7 @@ for i = 1:numel(setFiles)
     % Lock meta from the first processed file
     if ~firstMetaLocked
         Out.meta.fs       = EEG.srate;
+        Out.meta.srate    = EEG.srate;
         Out.meta.chanlocs = EEG.chanlocs;
         firstMetaLocked   = true;
     else
@@ -274,7 +349,7 @@ end
 
 % Optional: print warnings
 if ~isempty(warns)
-    fprintf('=== Extraction warnings (%d) ===\n', numel(warns));
+    fprintf('=== Extraction warnings (%%d) ===\n', numel(warns));
     fprintf('%s\n', strjoin(warns,newline));
 end
 
