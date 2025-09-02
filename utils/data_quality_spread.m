@@ -1,5 +1,5 @@
-function quality_index = data_quality(EEG)
-    % data_quality - Computes a simple proxy for EEG data quality.
+function quality_index = data_quality_spread(EEG)
+    % data_quality_spread - Computes a simple proxy for EEG data quality.
     %
     % Description:
     %   This function estimates the quality of EEG data based on the standard deviation 
@@ -19,7 +19,7 @@ function quality_index = data_quality(EEG)
     %   - Excludes extreme channels during the computation by trimming outliers.
     %
     % Usage Example:
-    %   quality_index = data_quality(EEG);
+    %   quality_index = data_quality_spread(EEG);
     %   fprintf('Quality Index: %f\n', quality_index);
     % This is modified from the original code in EEGlab.
     % Author: Zhipeng Cao, 2024 (zhipeng30@foxmail.com)

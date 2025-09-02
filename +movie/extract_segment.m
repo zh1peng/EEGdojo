@@ -5,6 +5,11 @@ function Out = extract_segment(varargin)
 %   markers. It's ideal for analyzing data from continuous recordings like
 %   movie-watching or resting-state paradigms.
 %
+%   It includes an option to standardize the length of all extracted segments
+%   by resampling them to a specified duration or sample count. This is
+%   particularly useful for movie-watching data where segment lengths may
+%   vary slightly across subjects.
+%
 % Output Structure:
 %   The output is a single struct `Out` with two main components:
 %   1. Out.meta: A struct containing shared information across all subjects.
@@ -15,14 +20,18 @@ function Out = extract_segment(varargin)
 %       .start_marker    - The event marker used to define the start of the segment.
 %       .end_marker      - The event marker used to define the end of the segment.
 %       .padding_sec     - Seconds of padding added before the start and after the end marker.
+%       .expected_length - The target number of samples for resampling.
 %       .created_at      - Timestamp of when the extraction was run.
 %       .run_tag         - A user-defined tag for this specific extraction run.
 %
 %   2. Out.sub_...: A series of dynamically named fields for each subject
 %      (e.g., Out.sub_001, Out.sub_S02). Each subject field is a struct containing:
-%       .data            - A [channels x time] matrix of the extracted segment.
-%       .crop_info       - A struct with info from `prep.crop_by_markers`,
-%                          including the start and end sample points of the crop.
+%       .data            - A [channels x time] matrix of the extracted (and optionally resampled) segment.
+%       .crop_info       - A struct with info from `prep.crop_by_markers`.
+%       .resample_info   - (If resampling is enabled) A struct with details on the resampling:
+%                          .original_length - Number of samples before resampling.
+%                          .expected_length - Target number of samples.
+%                          .missing_samples - The difference between expected and original length.
 %
 % Name-Value Pair Arguments:
 %   'study_path' (char, REQUIRED)
@@ -33,6 +42,14 @@ function Out = extract_segment(varargin)
 %
 %   'EndMarker' (char/string, REQUIRED)
 %       The event marker string that defines the end of the segment.
+%
+%   'movie_duration_sec' (numeric, default: [])
+%       The expected duration of the movie/segment in seconds. If provided,
+%       each segment is resampled to match this duration. Use this OR 'expected_length'.
+%
+%   'expected_length' (numeric, default: [])
+%       The expected number of samples in the final segment. If provided,
+%       each segment is resampled to this length. Use this OR 'movie_duration_sec'.
 %
 %   'searchstring' (char, default: '.*\.set$')
 %       A regular expression to find specific .set files within the study_path.
@@ -59,41 +76,33 @@ function Out = extract_segment(varargin)
 %   'save_path' (char, default: '')
 %       If provided, the final 'Out' struct is saved to this full path.
 %
-%   'save_v7_3' (logical, default: true)
-%       If saving, use the '-v7.3' flag to support larger files.
-%
 %   'run_tag' (char, default: timestamp)
 %       A custom string tag to identify this extraction run, stored in Out.meta.
 %
 % Examples:
-%
+% 
 %   % Example 1: Basic Extraction
-%   % Extracts the segment between 'movie_start' and 'movie_end' from all
-%   % .set files in the specified directory.
-%   MovieData = Movie.extract_segment( ...
-%       'study_path', 'C:\EEG_Data\MovieStudy',
+%   MovieData = movie.extract_segment( ...
+%       'study_path', 'C:\EEG_Data\MovieStudy', ...
 %       'StartMarker', 'movie_start',
 %       'EndMarker', 'movie_end');
 %
-%   % Example 2: Resting-State with Padding and Saving
-%   % Extracts a resting-state segment, adds 5 seconds of padding to each
-%   % side, and saves the output to a file.
-%   RestData = Movie.extract_segment( ...
-%       'study_path', 'C:\EEG_Data\RestingState',
-%       'StartMarker', 'start_rest',
-%       'EndMarker', 'end_rest',
-%       'PadSec', 5,
-%       'save_path', 'C:\EEG_Data\RestingState\processed\rest_segments.mat',
-%       'run_tag', 'resting_state_v1');
-%
-%   % Example 3: Excluding Noisy Channels
-%   % Extracts a segment but removes EOG and other specified channels first.
-%   CleanData = Movie.extract_segment( ...
-%       'study_path', 'C:\EEG_Data\MovieStudy',
+%   % Example 2: Resampling to a Fixed Duration
+%   % Extracts a movie segment and resamples it to be exactly 300 seconds long.
+%   MovieData = movie.extract_segment( ...
+%       'study_path', 'C:\EEG_Data\MovieStudy', ...
 %       'StartMarker', 'start',
-%       'EndMarker', 'stop',
-%       'chan_exclude', {'HEOG', 'VEOG', 'M1', 'M2'});
-
+%       'EndMarker', 'end',
+%       'movie_duration_sec', 300, ...
+%       'run_tag', 'movie_300s_resampled');
+%
+%   % Example 3: Resampling to a Fixed Sample Length
+%   % Extracts a segment and resamples it to exactly 150000 samples.
+%   MovieData = movie.extract_segment( ...
+%       'study_path', 'C:\EEG_Data\MovieStudy', ...
+%       'StartMarker', 'start',
+%       'EndMarker', 'end',
+%       'expected_length', 150000);
 %% ---- Parse Name–Value inputs
 p = inputParser;
 p.FunctionName = 'extract_segment';
@@ -109,6 +118,10 @@ addParameter(p, 'StartMarker', '', @(s) ischar(s) || isstring(s));
 addParameter(p, 'EndMarker', '', @(s) ischar(s) || isstring(s));
 addParameter(p, 'PadSec', 0, @isnumeric);
 
+% Resampling data to save length
+addParameter(p, 'movie_duration_sec', [], @(x) isempty(x) || (isnumeric(x) && isscalar(x)));
+addParameter(p, 'expected_length', [], @(x) isempty(x) || (isnumeric(x) && isscalar(x)));
+
 addParameter(p, 'locutoff', [], @(x) isempty(x) || isscalar(x));
 addParameter(p, 'hicutoff', [], @(x) isempty(x) || isscalar(x));
 addParameter(p, 'csd', false, @islogical);
@@ -121,6 +134,7 @@ addParameter(p, 'hilbert_env', false, @islogical);
 addParameter(p, 'tfr', false, @islogical);
 addParameter(p, 'tfr_freqs', [], @(x) isempty(x) || isvector(x));
 addParameter(p, 'tfr_n_cycles', [3 0.5], @isnumeric);
+addParameter(p, 'tfr_winsize', 250, @isscalar);
 
 addParameter(p, 'to_single', false, @islogical);
 addParameter(p, 'save_path', '', @ischar);
@@ -132,6 +146,8 @@ opt = p.Results;
 
 assert(~isempty(opt.study_path) && isfolder(opt.study_path), 'study_path not found.');
 assert(~isempty(opt.StartMarker) && ~isempty(opt.EndMarker), 'StartMarker and EndMarker are required.');
+assert(~(~isempty(opt.expected_length) && ~isempty(opt.movie_duration_sec)), 'Use either expected_length or movie_duration_sec, not both.');
+
 if opt.tfr
     assert(exist('newtimef', 'file'), 'newtimef() not found. Is EEGLAB in your path?');
     assert(~isempty(opt.tfr_freqs), 'tfr_freqs must be provided when tfr=true.');
@@ -158,13 +174,14 @@ Out.meta = struct( ...
     'start_marker',    opt.StartMarker, ...
     'end_marker',      opt.EndMarker, ...
     'padding_sec',     opt.PadSec, ...
+    'expected_length', [], ... % Will be filled in later
     'preproc',         preproc_opts, ...
     'tfr',             tfr_opts, ...
     'tfr_freqs',       [], ...
     'tfr_times',       [], ...
     'created_at',      datestr(now, 'yyyy-mm-dd HH:MM:SS'), ...
     'run_tag',         opt.run_tag, ...
-    'version',         1.1);
+    'version',         1.2);
 
 %% ---- Iterate files (per subject)
 firstMetaLocked = false;
@@ -202,14 +219,65 @@ for i = 1:numel(setFiles)
             EEG = eeg_checkset(EEG);
         end
 
+
+
+        % Crop the segment
+        [EEG_cropped, crop_info] = prep.crop_by_markers(EEG, ...
+            'StartMarker', opt.StartMarker, ...
+            'EndMarker', opt.EndMarker, ...
+            'PadSec', opt.PadSec);
+
+        % ---- Data Quality Metrics
+        if ~isempty(EEG_cropped.data)
+            % Calculate data quality metrics
+            data_quality = calculate_data_quality(EEG_cropped);
+        else
+            data_quality = struct();
+        end
+            
+        % ---- Resample to fixed length if requested
+
+        resample_info = struct();
+        if ~isempty(opt.expected_length) || ~isempty(opt.movie_duration_sec)
+            if ~isempty(opt.movie_duration_sec)
+                N_ref = round(opt.movie_duration_sec * EEG_cropped.srate);
+            else
+                N_ref = opt.expected_length;
+            end
+
+            original_length = EEG_cropped.pnts;
+            
+            if original_length ~= N_ref
+                % resample() works on columns, so we transpose, resample, and transpose back
+                % data_resampled = resample(double(EEG_cropped.data'), N_ref, original_length)' ;
+                t_old = 1:original_length;
+                t_new = linspace(1, original_length, N_ref);
+                data_resampled = interp1(t_old, EEG_cropped.data', t_new, 'pchip').';
+            else
+                data_resampled = EEG_cropped.data;
+            end
+            
+            EEG_cropped.data = data_resampled;
+            EEG_cropped.pnts = N_ref;
+            
+            resample_info.original_length = original_length;
+            resample_info.expected_length = N_ref;
+            resample_info.missing_samples = N_ref - original_length;
+            
+            if ~isfield(Out.meta, 'resampling_applied')
+                Out.meta.resampling_applied = true;
+                Out.meta.expected_length = N_ref;
+            end
+        end
+
         % ---- CSD Transformation
         if opt.csd
             if ~exist('CSD.m', 'file')
                 error('CSD.m not found. Make sure the CSD toolbox is in your MATLAB path.');
             end
-            montage.lab = {EEG.chanlocs.labels}';
-            montage.theta = [EEG.chanlocs.sph_theta]';
-            montage.phi = [EEG.chanlocs.sph_phi]';
+            montage.lab = {EEG.chanlocs.labels};
+            montage.theta = [EEG.chanlocs.sph_theta];
+            montage.phi = [EEG.chanlocs.sph_phi];
             [G, H] = GetGH(montage, opt.csd_m);
             EEG.data = CSD(EEG.data, G, H, opt.csd_lambda, opt.csd_head_radius);
         end
@@ -220,15 +288,12 @@ for i = 1:numel(setFiles)
                 EEG.data(chan_i, :) = abs(hilbert(EEG.data(chan_i, :)));
             end
         end
-
-        % Crop the segment
-        [EEG_cropped, crop_info] = prep.crop_by_markers(EEG, ...
-            'StartMarker', opt.StartMarker, ...
-            'EndMarker', opt.EndMarker, ...
-            'PadSec', opt.PadSec);
-
+        
         % ---- Time-Frequency Decomposition
         if opt.tfr
+            if opt.hilbert_env
+                error('Hilbert envelope was applied before TFR. This may not be intended.');
+            end
             fprintf('Running TFR for %s...\n', subID);
             % Per user insight, newtimef must be called per-channel for continuous data
             % to avoid misinterpreting the [chan x pnts] matrix.
@@ -257,7 +322,7 @@ for i = 1:numel(setFiles)
                     [EEG_cropped.xmin EEG_cropped.xmax]*1000, ...
                     EEG_cropped.srate, ...
                     opt.tfr_n_cycles, ...
-                     'winsize', 250, ...
+                     'winsize', opt.tfr_winsize, ...
                     'freqs', opt.tfr_freqs, ...
                     'baseline', NaN, ...
                     'plotersp', 'off', ...
@@ -292,10 +357,18 @@ for i = 1:numel(setFiles)
         Out.(subKey).data = data;
         Out.(subKey).crop_info = crop_info;
 
+        if ~isempty(fieldnames(data_quality))
+            Out.(subKey).quality_info = data_quality;
+        end
+
+        if ~isempty(fieldnames(resample_info))
+            Out.(subKey).resample_info = resample_info;
+        end
+
     catch ME
-        warns{end+1} = sprintf('[WARN] %s: %s', subID, ME.message);
-        Out.(subKey).data = [];
-        Out.(subKey).crop_info = struct('error', ME.message);
+        % Errors during processing for a subject are fatal.
+        fprintf('[ERROR] Failed to process subject %s. Halting execution.\n', subID);
+        rethrow(ME);
     end
 end
 
