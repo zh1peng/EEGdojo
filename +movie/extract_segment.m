@@ -61,6 +61,11 @@ function Out = extract_segment(varargin)
 %       A regular expression with a named token '(?<sub>...)' to extract a unique
 %       subject ID from each filename.
 %
+%   'subjects_to_include' (numeric vector | 'all', default: 'all')
+%       A numeric vector of indices to select a subset of the found subjects.
+%       For example, `1:10` will process only the first 10 subjects found
+%       (after natural sorting of filenames). If 'all', all subjects are processed.
+%
 %   'chan_include' (cellstr/string, default: {})
 %       A list of channel labels to *include*. All other channels will be removed.
 %
@@ -110,6 +115,7 @@ addParameter(p, 'study_path', '', @(x) ischar(x) && ~isempty(x));
 addParameter(p, 'searchstring', '.*\.set$', @ischar);
 addParameter(p, 'recursive', true, @islogical);
 addParameter(p, 'subject_parser', '(?<sub>.+)', @ischar);
+addParameter(p, 'subjects_to_include', 'all', @(x) (ischar(x) && strcmpi(x, 'all')) || (isnumeric(x) && isvector(x)));
 
 addParameter(p,'chan_include',{},@(x)iscellstr(x) || isstring(x));
 addParameter(p,'chan_exclude',{},@(x)iscellstr(x) || isstring(x));
@@ -156,8 +162,29 @@ end
 
 %% ---- Find .set files
 [paths, names] = filesearch_regexp(opt.study_path, opt.searchstring, opt.recursive);
+assert(~isempty(names), 'No .set files matched searchstring in study_path.');
+
+% Sort files naturally to ensure consistent subject ordering
+if exist('natsort', 'file')
+    [~, sort_idx] = natsort(names);
+    paths = paths(sort_idx);
+    names = names(sort_idx);
+else
+    warning('natsort.m not found. Files will be processed in default order. For consistent subject selection, add natsort to your path.');
+end
+
 setFiles = fullfile(paths, names);
 assert(~isempty(setFiles), 'No .set files matched searchstring in study_path.');
+
+% --- Apply subject selection ---
+if isnumeric(opt.subjects_to_include)
+    num_found = numel(setFiles);
+    indices = opt.subjects_to_include;
+    indices = unique(round(indices(indices > 0 & indices <= num_found)));
+    assert(~isempty(indices), 'The specified ''subjects_to_include'' indices resulted in an empty list of subjects.');
+    fprintf('Including %d subjects based on specified indices.\n', numel(indices));
+    setFiles = setFiles(indices);
+end
 
 %% ---- Initialize output container
 Out = struct();
@@ -186,6 +213,7 @@ Out.meta = struct( ...
 %% ---- Iterate files (per subject)
 firstMetaLocked = false;
 warns = {};
+quality_reports = {};
 
 for i = 1:numel(setFiles)
     fpath = setFiles{i};
@@ -359,6 +387,11 @@ for i = 1:numel(setFiles)
 
         if ~isempty(fieldnames(data_quality))
             Out.(subKey).quality_info = data_quality;
+
+            % For meta table
+            report_row = struct2table(data_quality, 'AsArray', true);
+            report_row.subject = string(subKey);
+            quality_reports{end+1} = report_row;
         end
 
         if ~isempty(fieldnames(resample_info))
@@ -369,6 +402,15 @@ for i = 1:numel(setFiles)
         % Errors during processing for a subject are fatal.
         fprintf('[ERROR] Failed to process subject %s. Halting execution.\n', subID);
         rethrow(ME);
+    end
+end
+
+%% ---- Assemble quality data table ----
+if ~isempty(quality_reports)
+    Out.meta.data_quality = vertcat(quality_reports{:});
+    % Move subject column to the front
+    if ismember('subject', Out.meta.data_quality.Properties.VariableNames)
+        Out.meta.data_quality = movevars(Out.meta.data_quality, 'subject', 'Before', 1);
     end
 end
 
