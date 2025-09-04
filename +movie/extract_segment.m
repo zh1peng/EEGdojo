@@ -238,6 +238,15 @@ for i = 1:numel(setFiles)
             EEG = eeg_checkset(EEG);
         end
 
+
+        % ---- Data Quality Metrics
+        if ~isempty(EEG.data)
+            % Calculate data quality metrics
+            data_quality = calculate_data_quality(EEG);
+        else
+            data_quality = struct();
+        end
+
         % ---- Filtering
         if (~isempty(opt.locutoff) && opt.locutoff > 0) || (~isempty(opt.hicutoff) && opt.hicutoff > 0)
             args = {};
@@ -255,13 +264,7 @@ for i = 1:numel(setFiles)
             'EndMarker', opt.EndMarker, ...
             'PadSec', opt.PadSec);
 
-        % ---- Data Quality Metrics
-        if ~isempty(EEG_cropped.data)
-            % Calculate data quality metrics
-            data_quality = calculate_data_quality(EEG_cropped);
-        else
-            data_quality = struct();
-        end
+
             
         % ---- Resample to fixed length if requested
 
@@ -322,6 +325,11 @@ for i = 1:numel(setFiles)
             if opt.hilbert_env
                 error('Hilbert envelope was applied before TFR. This may not be intended.');
             end
+
+            if ~isempty(opt.locutoff) && opt.locutoff > 0 || ~isempty(opt.hicutoff) && opt.hicutoff > 0
+                error('Cutoffs were specified, but TFR is not implemented with cutoffs. Please remove them.');
+            end
+
             fprintf('Running TFR for %s...\n', subID);
             % Per user insight, newtimef must be called per-channel for continuous data
             % to avoid misinterpreting the [chan x pnts] matrix.

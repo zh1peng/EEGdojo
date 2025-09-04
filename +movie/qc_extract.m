@@ -1,4 +1,4 @@
-function Out = auto_qc(Out, varargin)
+function Out = qc_extract(Out, varargin)
 % CHECK_QUALITY Visualize data quality metrics and flag subjects based on robust cutoffs.
 %   This function takes the output from `movie.extract_segment`, which
 %   should contain data quality information in `Out.meta.data_quality`,
@@ -22,7 +22,14 @@ function Out = auto_qc(Out, varargin)
 %       use as the cutoff for flagging outliers. For a given metric, a
 %       subject is flagged if their value is > median + (cutoff_mad * MAD)
 %       for metrics where higher is worse, or < median - (cutoff_mad * MAD)
-%       for metrics where lower is worse.
+%       for metrics where lower is worse. This is ignored for any metric
+%       that has a user-defined threshold specified in 'thresholds'.
+%
+%   'thresholds' (struct, default: struct())
+%       A struct where field names match the metric names and values are
+%       the specific cutoffs to use. For any metric specified here, the
+%       MAD-based calculation is skipped.
+%       Example: `struct('percent_retained_by_windows', 70, 'global_field_power_std', 5)`
 %
 %   'metrics_to_analyze' (cellstr, default: all non-NaN metrics)
 %       A cell array of strings specifying which quality metrics to include
@@ -32,12 +39,12 @@ function Out = auto_qc(Out, varargin)
 %   'save_path' (char, default: '')
 %       If a full path with a filename is provided (e.g., 'C:\reports\quality.png'),
 %       the generated figure will be saved to that location.
-
 %
 %   'filter_data' (logical, default: true)
 %       If true, the returned `Out` structure will be filtered to include
 %       only subjects that pass all quality checks. If false, the original
 %       `Out` structure is returned, but with the `auto_qc` table added.
+
 %
 % Output Structure:
 %   The function returns the modified `Out` struct, with a new table added:
@@ -65,12 +72,13 @@ function Out = auto_qc(Out, varargin)
 
 %% 1. Parse Inputs
 p = inputParser;
-p.FunctionName = 'movie.check_quality';
+p.FunctionName = 'movie.qc_extract';
 addRequired(p, 'Out', @(x) isstruct(x) && isfield(x, 'meta'));
 addParameter(p, 'cutoff_mad', 3, @(x) isnumeric(x) && isscalar(x) && x > 0);
 addParameter(p, 'metrics_to_analyze', {}, @iscellstr); % New parameter
 addParameter(p, 'save_path', '', @ischar);
 addParameter(p, 'filter_data', true, @islogical);
+addParameter(p, 'thresholds', struct(), @isstruct);
 parse(p, Out, varargin{:});
 opt = p.Results;
 
@@ -132,24 +140,37 @@ qc_flags.subject = quality_data_table.subject;
 cutoffs = struct();
 
 % Define which metrics are considered worse when their value is higher
-higher_is_worse = {'percent_bad_channels', 'percent_rejected_epochs', 'global_field_power_std', ...
+higher_is_worse = {
+                   'percent_bad_channels', 'percent_rejected_epochs', 'global_field_power_std', ...
                    'amplitude_spread_proxy', 'high_freq_noise_ratio', 'line_noise_power_50Hz', ...
-                   'line_noise_power_60Hz', 'percent_rejected_by_windows'};
+                   'line_noise_power_60Hz', 'percent_rejected_by_windows'
+                  };
 
 for i = 1:numel(metrics_to_analyze)
     metric = metrics_to_analyze{i}; % This is a string like 'percent_bad_channels'
     vals = quality_data_struct.(metric); % Access values from the struct
     
-    % Calculate robust stats (median and median absolute deviation)
-    med = median(vals, 'omitnan');
-    mad_val = custom_nanmad(vals);
-    
-    % Determine cutoff and pass/fail flags
+    % Check if a user-defined threshold is provided for this metric
+    if isfield(opt.thresholds, metric)
+        cutoff = opt.thresholds.(metric);
+        fprintf('Using user-defined threshold for %s: %.2f\n', metric, cutoff);
+    else
+        % Calculate robust stats (median and median absolute deviation)
+        med = median(vals, 'omitnan');
+        mad_val = custom_nanmad(vals);
+        
+        % Determine cutoff based on MAD
+        if any(strcmpi(metric, higher_is_worse))
+            cutoff = med + opt.cutoff_mad * mad_val;
+        else % Lower is worse
+            cutoff = med - opt.cutoff_mad * mad_val;
+        end
+    end
+
+    % Determine pass/fail flags based on the cutoff
     if any(strcmpi(metric, higher_is_worse))
-        cutoff = med + opt.cutoff_mad * mad_val;
         pass_fail_flags = vals <= cutoff;
-    else % Lower is worse (e.g., percent_retained_by_windows)
-        cutoff = med - opt.cutoff_mad * mad_val;
+    else % Lower is worse
         pass_fail_flags = vals >= cutoff;
     end
     
@@ -158,6 +179,7 @@ for i = 1:numel(metrics_to_analyze)
     qc_flags.(metric) = pass_fail_flags;
     cutoffs.(metric) = cutoff;
 end
+
 
 % Add overall include/exclude flag (1 if all individual flags are 1)
 metric_flags = table2array(qc_flags(:, 2:end));
@@ -203,8 +225,11 @@ for i = 1:num_plots
     
     title(strrep(metric, '_', ' '), 'FontWeight', 'normal');
     ylabel('Value');
+    xlabel('Subject');
     xlim([0 num_subjects+1]); % Use num_subjects from the table height
-    set(gca, 'XTick', 1:num_subjects, 'XTickLabel', strrep(quality_data_table.subject, 'sub_', ''), 'XTickLabelRotation', 90);
+    % set(gca, 'XTick', 1:num_subjects, 'XTickLabel', strrep(quality_data_table.subject, 'sub_', ''), 'XTickLabelRotation', 90);
+    % set Xtic off
+    set(gca, 'XTickLabel', []);
     grid on;
 end
 
