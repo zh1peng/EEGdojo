@@ -1,4 +1,4 @@
-function qc_table = qc_study(varargin)
+function [quality_data_table, qc_table] = qc_study(varargin)
 % GET_QC Generate and visualize data quality metrics from EEGLAB .set files.
 %   This function scans a directory for .set files, calculates a range of data
 %   quality metrics for each, and then flags outliers based on a robust
@@ -77,8 +77,14 @@ for i = 1:numel(setFiles)
     
     fprintf('  Loading and calculating quality for %s...\n', subID);
     EEG = pop_loadset(fpath);
-    data_quality = calculate_data_quality(EEG);
-    
+    if ~isempty(EEG.data)
+            % Calculate data quality metrics
+            EEG2qc =pop_eegfiltnew(EEG, 'locutoff', 1);
+            EEG2qc = eeg_checkset(EEG2qc);
+            data_quality = calculate_data_quality(EEG2qc);
+    else
+            data_quality = struct();
+    end
     report_row = struct2table(data_quality, 'AsArray', true);
     report_row.subject = string(subKey);
     quality_reports{end+1} = report_row;

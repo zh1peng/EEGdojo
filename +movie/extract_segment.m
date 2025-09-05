@@ -115,6 +115,7 @@ addParameter(p, 'study_path', '', @(x) ischar(x) && ~isempty(x));
 addParameter(p, 'searchstring', '.*\.set$', @ischar);
 addParameter(p, 'recursive', true, @islogical);
 addParameter(p, 'subject_parser', '(?<sub>.+)', @ischar);
+addParameter(p, 'setFile', {}, @(x) iscellstr(x) || isstring(x))
 addParameter(p, 'subjects_to_include', 'all', @(x) (ischar(x) && strcmpi(x, 'all')) || (isnumeric(x) && isvector(x)));
 
 addParameter(p,'chan_include',{},@(x)iscellstr(x) || isstring(x));
@@ -127,6 +128,9 @@ addParameter(p, 'PadSec', 0, @isnumeric);
 % Resampling data to save length
 addParameter(p, 'movie_duration_sec', [], @(x) isempty(x) || (isnumeric(x) && isscalar(x)));
 addParameter(p, 'expected_length', [], @(x) isempty(x) || (isnumeric(x) && isscalar(x)));
+
+% Output quality information
+addParameter(p, 'check_quality', false, @islogical);
 
 addParameter(p, 'locutoff', [], @(x) isempty(x) || isscalar(x));
 addParameter(p, 'hicutoff', [], @(x) isempty(x) || isscalar(x));
@@ -150,7 +154,9 @@ addParameter(p, 'run_tag', datestr(now, 'yyyy-mm-dd_HHMMSS'), @ischar);
 parse(p, varargin{:});
 opt = p.Results;
 
+if isempty(opt.setFile)
 assert(~isempty(opt.study_path) && isfolder(opt.study_path), 'study_path not found.');
+end
 assert(~isempty(opt.StartMarker) && ~isempty(opt.EndMarker), 'StartMarker and EndMarker are required.');
 assert(~(~isempty(opt.expected_length) && ~isempty(opt.movie_duration_sec)), 'Use either expected_length or movie_duration_sec, not both.');
 
@@ -161,6 +167,7 @@ end
 
 
 %% ---- Find .set files
+if isempty(opt.setFile)
 [paths, names] = filesearch_regexp(opt.study_path, opt.searchstring, opt.recursive);
 assert(~isempty(names), 'No .set files matched searchstring in study_path.');
 
@@ -175,7 +182,7 @@ end
 
 setFiles = fullfile(paths, names);
 assert(~isempty(setFiles), 'No .set files matched searchstring in study_path.');
-
+end
 % --- Apply subject selection ---
 if isnumeric(opt.subjects_to_include)
     num_found = numel(setFiles);
@@ -191,7 +198,8 @@ Out = struct();
 preproc_opts = struct('locutoff', opt.locutoff, 'hicutoff', opt.hicutoff, ...
     'csd', opt.csd, 'csd_lambda', opt.csd_lambda, ...
     'csd_head_radius', opt.csd_head_radius, 'csd_m', opt.csd_m, ...
-    'hilbert_env', opt.hilbert_env);
+    'hilbert_env', opt.hilbert_env,...
+    'check_quality', opt.check_quality);
 
 tfr_opts = struct('enable', opt.tfr, 'freqs', opt.tfr_freqs, 'n_cycles', opt.tfr_n_cycles);
 
@@ -238,15 +246,17 @@ for i = 1:numel(setFiles)
             EEG = eeg_checkset(EEG);
         end
 
-
-        % ---- Data Quality Metrics
-        if ~isempty(EEG.data)
+        
+          % ---- Data Quality Metrics
+        if opt.check_quality && ~isempty(EEG.data)
             % Calculate data quality metrics
-            data_quality = calculate_data_quality(EEG);
+            EEG2qc =pop_eegfiltnew(EEG, 'locutoff', 1);
+            EEG2qc = eeg_checkset(EEG2qc);
+            data_quality = calculate_data_quality(EEG2qc);
         else
             data_quality = struct();
         end
-
+      
         % ---- Filtering
         if (~isempty(opt.locutoff) && opt.locutoff > 0) || (~isempty(opt.hicutoff) && opt.hicutoff > 0)
             args = {};
@@ -255,6 +265,7 @@ for i = 1:numel(setFiles)
             EEG = pop_eegfiltnew(EEG, args{:});
             EEG = eeg_checkset(EEG);
         end
+
 
 
 
