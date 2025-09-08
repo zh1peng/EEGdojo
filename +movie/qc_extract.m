@@ -85,7 +85,7 @@ opt = p.Results;
 
 %% 2. Extract Quality Data
 if ~isfield(Out, 'meta') || ~isfield(Out.meta, 'data_quality') || isempty(Out.meta.data_quality)
-    error('Input struct must contain `Out.meta.data_quality` table with quality information.');
+    error('Input struct must contain `Out.meta.data_quality` table with quality information. Have you turn on check_quality when extract segmentation?');
 end
 
 % Get the quality data table

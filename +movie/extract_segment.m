@@ -171,17 +171,20 @@ if isempty(opt.setFile)
 [paths, names] = filesearch_regexp(opt.study_path, opt.searchstring, opt.recursive);
 assert(~isempty(names), 'No .set files matched searchstring in study_path.');
 
-% Sort files naturally to ensure consistent subject ordering
-if exist('natsort', 'file')
-    [~, sort_idx] = natsort(names);
-    paths = paths(sort_idx);
-    names = names(sort_idx);
-else
-    warning('natsort.m not found. Files will be processed in default order. For consistent subject selection, add natsort to your path.');
-end
+    % Sort files naturally to ensure consistent subject ordering
+    if exist('natsort', 'file')
+        [~, sort_idx] = natsort(names);
+        paths = paths(sort_idx);
+        names = names(sort_idx);
+    else
+        warning('natsort.m not found. Files will be processed in default order. For consistent subject selection, add natsort to your path.');
+    end
 
 setFiles = fullfile(paths, names);
 assert(~isempty(setFiles), 'No .set files matched searchstring in study_path.');
+
+else
+    setFiles=opt.setFile;
 end
 % --- Apply subject selection ---
 if isnumeric(opt.subjects_to_include)

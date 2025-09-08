@@ -151,8 +151,7 @@ end
 %% ---- Handle channel exclusion for calculations ----
 EEG_calc = EEG;
 if ~isempty(opt.chan_exclude)
-    chan_idx_to_exclude = utils.chans2idx(EEG, opt.chan_exclude);
-    EEG_calc = pop_select(EEG, 'nochannel', chan_idx_to_exclude);
+    EEG_calc = pop_select(EEG, 'nochannel', opt.chan_exclude);
 end
 
 if ~isempty(EEG_calc.data)

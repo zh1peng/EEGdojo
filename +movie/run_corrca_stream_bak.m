@@ -353,19 +353,15 @@ if ~isempty(opt.fixed)
     return;
 end
 
-% Regularize Rw (align with external/corrca: shrinkage only by default)
+% Regularize Rw
+if isempty(opt.ridge), epsR = 1e-6 * trace(Rw)/D; else, epsR = opt.ridge; end
 gamma = opt.shrinkage;
-if isempty(opt.ridge) || opt.ridge==0
-    Rwreg = (1-gamma)*Rw + gamma*mean(diag(Rw))*eye(D);
-else
-    Rwreg = (1-gamma)*Rw + gamma*mean(diag(Rw))*eye(D) + opt.ridge*eye(D);
-end
+Rwreg = (1-gamma)*Rw + gamma*mean(diag(Rw))*eye(D) + epsR*eye(D);
 
 % Solve generalized eig
 if ~isempty(opt.tsvd)
-    % TSVD should be based on unregularized Rw (like external/corrca), ignoring shrinkage
-    K = min(opt.tsvd, rank(Rw));
-    [U,Sv] = eig((Rw+Rw')/2,'vector'); [Sv,idx] = sort(real(Sv),'descend'); U = real(U(:,idx));
+    K = min(opt.tsvd, rank(Rwreg));
+    [U,Sv] = eig((Rwreg+Rwreg')/2,'vector'); [Sv,idx] = sort(real(Sv),'descend'); U = real(U(:,idx));
     K = min(K, sum(Sv>max(Sv)*eps));
     U = U(:,1:K); Sv = Sv(1:K);
     Rw_sub = diag(Sv);           % K x K
@@ -374,16 +370,7 @@ if ~isempty(opt.tsvd)
     [lam,ord] = sort(real(lam),'descend'); Wsub = real(Wsub(:,ord));
     W = U * Wsub;                % D x K
 else
-    % Use Cholesky-based generalized eigensolver to mirror external/corrca
-    try
-        [W, Dmat] = eig(Rb, Rwreg, 'chol');
-        lam = diag(Dmat);
-    catch
-        % Fallback: add a tiny ridge if needed for numerical PD of Rwreg
-        epsR = 1e-12 * trace(Rw)/max(D,1);
-        [W, Dmat] = eig(Rb, Rwreg + epsR*eye(D), 'chol');
-        lam = diag(Dmat);
-    end
+    [W, lam] = eig(Rb, Rwreg, 'vector');
     [lam,ord] = sort(real(lam),'descend'); W = real(W(:,ord));
 end
 
