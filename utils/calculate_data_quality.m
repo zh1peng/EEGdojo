@@ -163,7 +163,7 @@ if ~isempty(EEG_calc.data)
     gfp = std(data, [], 1); % GFP is the standard deviation across channels at each time point
     quality.global_field_power_std = std(gfp);
 
-    %% ---- Amplitude Spread Proxy ----
+    %% ---- Amplitude Spread Proxy ---- old version only take first 1000 time point
     % This is a proxy metric for data quality based on the spread (standard deviation)
     % of the EEG signal amplitudes. Larger values may indicate noisier data.
     % Determine number of points to check (limit to 1000 points for efficiency)
@@ -187,15 +187,51 @@ if ~isempty(EEG_calc.data)
     mean_std = mean(trimmed_stds);
     
     % Derive quality index as a "spacing value"
-    quality_index = mean_std * 3; % Multiplier to estimate spread
-    
-    % Round spacing for readability if value is large
-    if quality_index > 10
-        quality_index = round(quality_index);
-    end
-    
+    quality_index = mean_std * 3; % Multiplier to estimate spread  
     quality.amplitude_spread_proxy = quality_index;
 
+
+    %% ---- Amplitude Spread Proxy (new) ----
+    % Proxy metric for data quality based on the spread (std) of EEG amplitudes.
+    % Larger values may indicate noisier data.
+    % Improvements:
+    %   1. Evenly subsample across the entire recording (not just the start).
+    %   2. Compute stds within windows and take the median (robust to bursts).
+    %   3. Use trimmed mean across channels to reduce impact of outliers.
+
+    % Parameters
+    max_points   = min(5000, size(EEG_calc.data,2));  % up to 5k points for efficiency
+    n_windows    = 5;       % number of windows to sample across recording
+    trim_percent = 5;       % % to trim when averaging channel stds
+
+    % Build evenly spaced indices across the recording
+    total_points = size(EEG_calc.data,2);
+    idx = round(linspace(1, total_points, max_points));
+
+    % Subsample data
+    data_subset = data(:, idx);
+
+    % Divide into windows
+    win_len = floor(size(data_subset,2) / n_windows);
+    win_stds = zeros(size(data_subset,1), n_windows);
+
+    for w = 1:n_windows
+        cols = (1:win_len) + (w-1)*win_len;
+        if max(cols) <= size(data_subset,2)
+            win_stds(:,w) = std(data_subset(:, cols), 0, 2);
+        end
+    end
+
+    % Median across windows per channel
+    channel_stds = median(win_stds, 2, 'omitnan');
+
+    % Trimmed mean across channels
+    mean_std = trimmean(channel_stds, trim_percent);
+
+    % Derive quality index as a "spacing value"
+    quality_index = mean_std * 3;
+
+    quality.amplitude_spread_global = quality_index;
 
     %% ---- Spectral Metrics ----
     if EEG_calc.srate > 0
