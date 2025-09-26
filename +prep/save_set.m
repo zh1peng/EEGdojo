@@ -2,7 +2,7 @@ function [EEG, out] = save_set(EEG, varargin)
 % SAVE_SET  Save EEGLAB dataset (.set)
 %
 % Usage:
-%   [EEG, out] = eegdojo.io.save_set(EEG, 'filename','x.set','filepath','./out')
+%   [EEG, out] = eegdojo.prep.save_set(EEG, 'filename','x.set','filepath','./out')
 %
     p = inputParser;
     % EEG is already the first input argument, no need to add it to inputParser

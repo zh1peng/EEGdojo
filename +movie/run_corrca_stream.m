@@ -253,7 +253,7 @@ function Xi = preproc_one(fpath, opt)
         EEG = pop_select(EEG, 'nochannel', opt.chan_exclude); EEG = eeg_checkset(EEG);
     end
 
-    % Filtering as in your extract_segment
+    % Filtering as in extract_segment
     if (~isempty(opt.locutoff) && opt.locutoff>0) || (~isempty(opt.hicutoff) && opt.hicutoff>0)
         args = {};
         if ~isempty(opt.locutoff) && opt.locutoff>0, args = [args, {'locutoff', opt.locutoff}]; end

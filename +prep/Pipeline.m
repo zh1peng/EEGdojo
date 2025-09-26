@@ -51,7 +51,7 @@ classdef Pipeline < handle
         %
         % Example:
         % 1) Named + struct
-        % eeg_pipe.addStep('Load', @IO.load_set, localParams.IO);
+        % eeg_pipe.addStep('Load', @prep.load_set, localParams.IO);
 
         % % 2) Unnamed + NV
         % eeg_pipe.addStep(@prep.downsample, 'freq', localParams.DownsamplingRate);
@@ -63,7 +63,7 @@ classdef Pipeline < handle
         % eeg_pipe.addStep('Bad channels', @prep.remove_bad_channels, localParams.BadChan, extraBadChanOpts);
 
         % % 5) Your original pattern still works
-        % eeg_pipe.addStep('Save', @IO.save_set, 'filepath', localParams.IO.outputpath, 'filename', localParams.IO.outfilename);
+        % eeg_pipe.addStep('Save', @prep.save_set, 'filepath', localParams.IO.outputpath, 'filename', localParams.IO.outfilename);
 
 
         assert(~isempty(varargin), 'addStep requires at least a function handle.');

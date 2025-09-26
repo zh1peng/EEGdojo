@@ -2,7 +2,7 @@ function [EEG, out] = load_set(~, varargin)
 % LOAD_SET  Load an EEGLAB .set dataset
 %
 % Usage:
-%   [EEG, out] = eegdojo.io.load_set([], 'filename','x.set','filepath','./data')
+%   [EEG, out] = eegdojo.prep.load_set([], 'filename','x.set','filepath','./data')
 %
     p = inputParser; 
     p.addParameter('filename','',@ischar);
