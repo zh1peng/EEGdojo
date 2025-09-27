@@ -149,25 +149,32 @@ else
 end
 
 %% ---- Handle channel exclusion for calculations ----
+% here we don't do by epoch idx
+
 EEG_calc = EEG;
 if ~isempty(opt.chan_exclude)
     EEG_calc = pop_select(EEG, 'nochannel', opt.chan_exclude);
+end
+
+if numel(size(EEG_calc.data))==3
+    warning('converting epoched data to continuous data for calculation')
+   EEG_calc.data =  reshape(EEG_calc.data, size(EEG_calc.data,1), []);  % [nChan × (nTime*nTrials)]
 end
 
 if ~isempty(EEG_calc.data)
     % Ensure data is double precision for calculations
     data = double(EEG_calc.data);
 
-    %% ---- Global Signal Metrics ----
+    % ---- Global Signal Metrics ----
     % Calculate Global Field Power (GFP)
     gfp = std(data, [], 1); % GFP is the standard deviation across channels at each time point
     quality.global_field_power_std = std(gfp);
-
+    quality.global_field_power_mean = mean(gfp);
     %% ---- Amplitude Spread Proxy ---- old version only take first 1000 time point
     % This is a proxy metric for data quality based on the spread (standard deviation)
     % of the EEG signal amplitudes. Larger values may indicate noisier data.
     % Determine number of points to check (limit to 1000 points for efficiency)
-    max_points = min(1000, EEG_calc.pnts * EEG_calc.trials);
+    max_points = min(1000, size(EEG_calc.data,2));
     
     % Extract data for computation
     data_subset = data(:, 1:max_points);
@@ -188,7 +195,7 @@ if ~isempty(EEG_calc.data)
     
     % Derive quality index as a "spacing value"
     quality_index = mean_std * 3; % Multiplier to estimate spread  
-    quality.amplitude_spread_proxy = quality_index;
+    quality.amplitude_spread_1k = quality_index;
 
 
     %% ---- Amplitude Spread Proxy (new) ----
@@ -271,6 +278,11 @@ if ~isempty(EEG_calc.data)
         end
     end
 
+
+%% 1/f index
+[slope_mean, ~] = aperiodic_slope(EEG_calc.data, EEG_calc.srate, [2 40]);
+quality.aperiodic_slope_mean = slope_mean;
+
     %% ---- Window-based Quality Metric ----
     % This metric calculates the percentage of data retained after window-based rejection
     % using the clean_windows function. It reflects the amount of "good" data
@@ -307,4 +319,45 @@ else
     quality.percent_rejected_by_windows = NaN;
 end
 
+end
+
+function [slope_mean, slopes, f_fit] = aperiodic_slope(data, fs, frange, notchHz)
+% Aperiodic (1/f) slope via log–log linear fit, vectorized over channels.
+% data:  [nChan x nTime]
+% fs:    sampling rate (Hz)
+% frange: [fmin fmax] for fit (e.g., [2 40])
+% notchHz: scalar 50 or 60 to exclude ±1 Hz around line noise harmonics (optional)
+
+if nargin < 3 || isempty(frange),  frange = [2 40]; end
+if nargin < 4, notchHz = []; end
+
+% --- PSD (Welch) ---
+% (Use 2 s windows; adjust if needed)
+win = round(2*fs); 
+[pxx, f] = pwelch(data.', hamming(win), [], [], fs, 'psd');  % pxx: [nFreq x nChan]
+
+% --- Fit mask (frequency range + notch exclusion) ---
+fitMask = (f >= frange(1) & f <= frange(2));
+if ~isempty(notchHz)
+    harm = notchHz:notchHz:floor(frange(2));
+    excl = false(size(f));
+    for h = harm
+        excl = excl | (f >= h-1 & f <= h+1);
+    end
+    fitMask = fitMask & ~excl;
+end
+
+f_fit = f(fitMask);
+lf = log10(f_fit);                       % [nFit x 1]
+LP = log10(pxx(fitMask, :));             % [nFit x nChan]
+
+% --- Vectorized linear regression: logP = a + b*logF ---
+% Build design X = [1, logF]
+X = [ones(numel(lf),1) lf];              % [nFit x 2]
+% Solve for all channels at once via least squares
+% beta = (X'X)\(X'Y) is equivalent to X\Y for full-rank X
+beta = X \ LP;                           % [2 x nChan], rows: [intercept; slope]
+
+slopes = beta(2, :).';                   % [nChan x 1]
+slope_mean = mean(slopes, 'omitnan');
 end
