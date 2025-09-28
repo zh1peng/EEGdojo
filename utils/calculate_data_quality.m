@@ -161,6 +161,9 @@ if numel(size(EEG_calc.data))==3
    EEG_calc.data =  reshape(EEG_calc.data, size(EEG_calc.data,1), []);  % [nChan × (nTime*nTrials)]
 end
 
+quality.data_point_count = size(EEG_calc.data,2);
+
+
 if ~isempty(EEG_calc.data)
     % Ensure data is double precision for calculations
     data = double(EEG_calc.data);
