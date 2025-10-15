@@ -71,10 +71,10 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %     you MAY z-transform ISC externally (zISC = atanh(rISC)) and report
 %     back-transformed estimates.
 % v2.1 (2025) – unified metric control; static + time-resolved.
-
+% v2.2 (2025) – avoid to give ISCpair.
 % ---------- Validate input ----------
 if ndims(Y) ~= 2
-    error('isc_per_subject:2D only Y must be 2-D [T x N]. If 3-D, collapse to 2-D before calling.');
+    error('isc_per_subject:2Donly', 'Y must be 2-D [T x N]. If 3-D, collapse to 2-D before calling.');
 end
 [T, N] = size(Y);
 
@@ -85,18 +85,30 @@ P.addParameter('winLength',    [],    @(x)isempty(x) || (isscalar(x) && x>=2 && 
 P.addParameter('edgeMode',     'shrink', @(s)ischar(s) || isstring(s));
 P.addParameter('pairMetric',   'corr', @(s) any(strcmpi(string(s),["corr","cov"])));
 P.addParameter('fisherZ',      true, @(x)islogical(x)&&isscalar(x));
+P.addParameter('pairwise',     [], @(x) isempty(x) || (islogical(x) && isscalar(x)));
 P.parse(varargin{:});
 opt = P.Results;
 
 opt.edgeMode   = lower(string(opt.edgeMode));
 opt.pairMetric = lower(string(opt.pairMetric));
 
+% Decide whether to compute pairwise matrices
+% Default:
+%   - static: compute pairwise if caller asked for 3rd output
+%   - time-resolved: do NOT compute pairwise unless explicitly requested
+if isempty(opt.pairwise)
+    wantPair = (nargout >= 3) && ~opt.timeResolved;
+else
+    wantPair = (nargout >= 3) && opt.pairwise;
+end
+
 meta = struct('T',T,'N',N, ...
               'timeResolved',logical(opt.timeResolved), ...
               'winLength',opt.winLength, ...
               'edgeMode',char(opt.edgeMode), ...
               'pairMetric',char(opt.pairMetric), ...
-              'fisherZ',logical(opt.fisherZ));
+              'fisherZ',logical(opt.fisherZ), ...
+              'pairwiseComputed',logical(wantPair));
 
 % ---------- Static branch ----------
 if ~opt.timeResolved
@@ -104,10 +116,14 @@ if ~opt.timeResolved
     C = safe_gram(Y, opt.pairMetric);   % N x N (corr or cov)
     ISC = isc_from_C(C);                % [N x 1]
 
-    % Pairwise matrix (same metric)
-    ISCpair = C;                        % [N x N]
-    if opt.fisherZ && opt.pairMetric == "corr"
-        ISCpair = atanh(max(min(ISCpair, 0.999999), -0.999999)); % Fisher z
+    % Pairwise matrix (same metric) — gated
+    if wantPair
+        ISCPair = C;
+        if opt.fisherZ && opt.pairMetric == "corr"
+            ISCPair = atanh(max(min(ISCPair, 0.999999), -0.999999)); % Fisher z
+        end
+    else
+        ISCPair = [];
     end
     return;
 end
@@ -125,8 +141,12 @@ if mod(w,2)==0
 end
 h = floor((w-1)/2);
 
-ISC     = nan(N, T, 'like', Y);    % per-subject ISC
-ISCpair = nan(N, N, T, 'like', Y); % pairwise matrices
+ISC     = nan(N, T, 'like', Y);      % per-subject ISC
+if wantPair
+    ISCPair = nan(N, N, T, 'like', Y); % pairwise matrices
+else
+    ISCPair = [];                      % not computed / not allocated
+end
 
 switch opt.edgeMode
     case "shrink"
@@ -138,11 +158,14 @@ switch opt.edgeMode
             if size(W,1) < 2, continue; end
             C = safe_gram(W, opt.pairMetric);     % N x N
             ISC(:, t) = isc_from_C(C);            % [N x 1]
-            P = C;                                 % pairwise
-            if opt.fisherZ && opt.pairMetric == "corr"
-                P = atanh(max(min(P, 0.999999), -0.999999));
+
+            if wantPair
+                P = C;                             % pairwise
+                if opt.fisherZ && opt.pairMetric == "corr"
+                    P = atanh(max(min(P, 0.999999), -0.999999));
+                end
+                ISCPair(:,:,t) = P;
             end
-            ISCpair(:,:,t) = P;
         end
 
     case {"reflect","replicate"}
@@ -152,11 +175,14 @@ switch opt.edgeMode
             W = Ypad(idx, :);                     % [w x N]
             C = safe_gram(W, opt.pairMetric);
             ISC(:, t) = isc_from_C(C);
-            P = C;
-            if opt.fisherZ && opt.pairMetric == "corr"
-                P = atanh(max(min(P, 0.999999), -0.999999));
+
+            if wantPair
+                P = C;
+                if opt.fisherZ && opt.pairMetric == "corr"
+                    P = atanh(max(min(P, 0.999999), -0.999999));
+                end
+                ISCPair(:,:,t) = P;
             end
-            ISCpair(:,:,t) = P;
         end
 
     otherwise
@@ -164,6 +190,7 @@ switch opt.edgeMode
 end
 
 end % isc_per_subject
+
 
 % ==================== Helpers ====================
 

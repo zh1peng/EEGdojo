@@ -79,7 +79,7 @@ function [EEG, out] = segment_rest(EEG, varargin)
     % Segment the data into epochs based on the new markers
     logPrint(R.LogFile, '[segment_rest] Epoching data based on "epoch_start" events...');
     EEG = pop_epoch(EEG, {'epoch_start'}, [0 epochLength_sec], 'epochinfo', 'yes');
-
+    EEG = eeg_checkset(EEG);
     out.epochs_created = EEG.trials;
 
     logPrint(R.LogFile, sprintf('[segment_rest] Data segmented into %d epochs.', out.epochs_created));

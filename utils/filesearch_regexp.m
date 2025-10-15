@@ -1,61 +1,54 @@
 function [paths, names] = filesearch_regexp(startDir, expression, recurse)
-% filesearch_regexp searches for files in a directory that match a given regular expression.
+% filesearch_regexp searches for files/folders whose *names* match a regex.
 %
 % Usage:
-%   [paths, names] = filesearch_regexp(startDir, expression, [norecurse])
+%   [paths, names] = filesearch_regexp(startDir, expression, [recurse])
 %
 % Inputs:
-%   startDir   - Starting directory for the search
-%   expression - Regular expression pattern to match file names
-%   recurse  - Optional flag to control recursive search (default: 1 for recursive)
+%   startDir   - Starting directory
+%   expression - Regex applied to item names (case-insensitive)
+%   recurse    - 1 (default) to search subfolders, 0 to stay in startDir
 %
 % Outputs:
-%   paths - Cell array of paths to files matching the expression
-%   names - Cell array of names of files matching the expression
+%   paths - Parent paths of matching items
+%   names - Names of matching items
 %
-% Example:
-% searchPath='W:\HC_EEG'
-% filepattern = '.*mid.*';
-% [filepath,filename]=filesearch_regexp(searchPath, filepattern,0)
-%
-% 2024/02/06: fix return directory (e.g., mff folder from egi device)
-% Author: Zhipeng Cao; zhipeng30@foxmail.com
+% Notes:
+% - Works for EGI .mff “files” (which are folders). Example pattern:
+%   'sub-.*?task-mid_run-1_eeg\.mff$'
 
-if nargin < 3 || isempty(recurse)
-    recurse = 1; % Default is to search recursively
-end
+if nargin < 3 || isempty(recurse), recurse = 1; end
+recurse = logical(recurse);
 
-% Check if the start directory exists
 if ~exist(startDir, 'dir')
-    error('Starting directory does not exist.');
+    error('Starting directory does not exist: %s', startDir);
 end
 
-% Internal function to perform the directory search
-[paths, names] = dir_search(startDir, expression, recurse);
+[paths, names] = dir_search(startDir);
 
-    function [paths, names] = dir_search(currDir, expression, recurse)
+    function [paths, names] = dir_search(currDir)
         paths = {};
         names = {};
-        list_currDir = dir(currDir); % List all items in the current directory
-        
-        for u = 1:length(list_currDir)
-            itemName = list_currDir(u).name;
-            itemPath = fullfile(currDir, itemName); % Build full path for the item
-            
-            
-            
-            if recurse&& list_currDir(u).isdir && ~strcmp(itemName, '.') && ~strcmp(itemName, '..')
-                
-                % Recursively search in subdirectories if recurse is set
-                [subPaths, subNames] = dir_search(itemPath, expression, recurse);
-                paths = [paths, subPaths];
-                names = [names, subNames];
-                
-            else
-                % Check if the item matches the regular expression
-                if ~isempty(regexpi(itemName, expression))
-                    paths = [paths, {currDir}];
-                    names = [names, {itemName}];
+
+        listing = dir(currDir);
+        listing = listing(~ismember({listing.name}, {'.','..'})); % skip dots
+
+        for k = 1:numel(listing)
+            itemName = listing(k).name;
+            itemPath = fullfile(currDir, itemName);
+
+            % Record match if name matches regex (return parent dir)
+            if ~isempty(regexpi(itemName, expression))
+                paths{end+1} = currDir; %#ok<AGROW>
+                names{end+1} = itemName; %#ok<AGROW>
+            end
+
+            % Recurse if requested
+            if recurse && listing(k).isdir
+                [subPaths, subNames] = dir_search(itemPath);
+                if ~isempty(subPaths)
+                    paths = [paths, subPaths]; %#ok<AGROW>
+                    names = [names, subNames]; %#ok<AGROW>
                 end
             end
         end

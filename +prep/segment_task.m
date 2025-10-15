@@ -83,16 +83,35 @@ function [EEG, out] = segment_task(EEG, varargin)
     logPrint(R.LogFile, '[segment_task] Calling pop_epoch to segment data...');
     EEG = pop_epoch(EEG, R.Markers, timeWindow_sec, 'epochinfo', 'yes');
     
-    % Log the number of epochs for each marker type
-    unique_markers = unique(R.Markers);
-    for i = 1:length(unique_markers)
-        marker = unique_markers{i};
-        n_epochs = sum(ismember({EEG.epoch.eventtype}, marker));
-        out.epochs_created.(marker) = n_epochs;
-        logPrint(R.LogFile, sprintf('[segment_task] Created %d epochs for marker %s', n_epochs, marker));
+    if isempty(EEG.data)
+        logPrint(R.LogFile, '[segment_task error] EEG.data is empty.Timewindow is in ms. Please check your inputs');
     end
-    logPrint(R.LogFile, sprintf('[segment_task] Total epochs created: %d', EEG.trials));
-    
+
+    EEG = eeg_checkset(EEG);
+    % Log the number of epochs for each marker type (robust version)
+unique_markers = unique(R.Markers);
+
+% Preprocess epoch event types to handle cell/char/numeric variations
+epoch_eventtypes = cell(1, EEG.trials);
+for e = 1:EEG.trials
+    et = EEG.epoch(e).eventtype;
+    if ~iscell(et), et = {et}; end
+    % Convert all entries to char strings
+    et = cellfun(@(x) char(string(x)), et, 'UniformOutput', false);
+    epoch_eventtypes{e} = et;
+end
+
+for i = 1:numel(unique_markers)
+    marker = unique_markers{i};
+    % Count epochs containing this marker
+    n_epochs = sum(cellfun(@(et) any(strcmp(marker, et)), epoch_eventtypes));
+    % Sanitize field name (avoid '-' or spaces)
+    safe_marker = matlab.lang.makeValidName(marker, 'ReplacementStyle', 'underscore', 'Prefix', 'm_');
+    out.epochs_created.(safe_marker) = n_epochs;
+    logPrint(R.LogFile, sprintf('[segment_task] Created %d epochs for marker %s', n_epochs, marker));
+end
+
+logPrint(R.LogFile, sprintf('[segment_task] Total epochs created: %d', EEG.trials));
     out.total_epochs = EEG.trials;
 
     logPrint(R.LogFile, '[segment_task] ------ Task segmentation complete ------');

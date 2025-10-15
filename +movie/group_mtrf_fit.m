@@ -151,10 +151,15 @@ else
 end
 
 % ---------------- Group summaries ----------------
-mu  = squeeze(mean(W, 1, 'omitnan')).';    % [nPred x nLags]
-sd  = squeeze(std(W,  0, 1, 'omitnan')).'; % [nPred x nLags]
-nEff= sum(~any(isnan(squeeze(W(:,:,1))),2));
-se  = sd ./ max(1, sqrt(nEff));
+% this have issue when W has only one predictor
+% mu  = squeeze(mean(W, 1, 'omitnan')).';    % [nPred x nLags]
+% sd  = squeeze(std(W,  0, 1, 'omitnan')).'; % [nPred x nLags]
+
+mu = permute(mean(W, 1, 'omitnan'), [3 2 1]);   % -> [nLags x nPred]
+sd = permute(std( W, 0, 1, 'omitnan'), [3 2 1]);% -> [nLags x nPred]
+
+nEff = sum(~any(isnan(W(:,:,1)), 2));           % subjects with non-NaN at first lag
+se   = sd ./ max(1, sqrt(nEff));                % broadcasts over [nLags x nPred]
 
 % ---------------- Package output ----------------
 TRFres = struct();

@@ -1,4 +1,22 @@
 
+EEGLAB_path = '/media/NAS/misc/matlab_toolbox/eeglab2023.1';
+EEGdojo= '/media/NAS/misc/matlab_toolbox/EEGdojo';
+FASTER_path =  '/media/NAS/misc/matlab_toolbox/FASTER';
+addpath(genpath(EEGLAB_path))
+addpath(genpath(FASTER_path))
+addpath(genpath(EEGdojo))
+
+clear; close all; clc;
+%% Get subinfo
+BIDS_path = sprintf( '/media/NAS/EEGdata/HBN_EEG_BIDS/cmi_bids_R%d', idx);
+
+run('/media/NAS/EEGdata/HBN_EEG_BIDS/moviedm_code/prep_params_template_EGI.m')
+derivative_path = fullfile(BIDS_path, 'derivatives/prep_mid');
+if ~exist(derivative_path , 'dir')
+    mkdir(derivative_path );
+end
+save(fullfile(derivative_path,'prep_parameters.mat'),'Params')
+[subpath, subfile] = filesearch_regexp(BIDS_path, 'sub-.*MID_eeg\.set');
 
 
 eeg_pipe = prep.Pipeline([], p) ...
@@ -11,7 +29,9 @@ eeg_pipe = prep.Pipeline([], p) ...
     .addStep('Bad channels', @prep.remove_bad_channels, p.BadChan) ...
     .addStep('Re-reference', @prep.reref, p.Reref) ...
     .addStep('ICA + prune', @prep.remove_bad_ICs, p.BadIC) ...
-    .addStep('Intepolate', @prep.interpolate, 'LogFile',p.LogFile) ...
+    .addStep('Intepolate', @prep.interpolate) ...
+    .addStep('Epoch', @prep.segment_task, p.EpochTask) ...
+    .addStep('Bad epochs', @prep.remove_bad_epochs) ...
     .addStep('Save', @prep.save_set, p.Output) ...
-    .run()
+    .run();
 logPrint(p.LogFile,'--- All pipelines finished ---');
