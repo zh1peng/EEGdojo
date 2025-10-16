@@ -124,6 +124,17 @@ function Out = extract_epoch(varargin)
 %       'searchstring', '_eeg\.set$',
 %       'subject_parser', '(?<sub>sub-\d+)_<ses>ses-\w+)', ...
 %       'markers', {'response'});
+%  % Example 5
+% subject_parser = ['^(?<sub>sub-\d+)', ...
+%                   '(?:_(?<ses>ses-[^_]+))?', ...
+%                   '(?:_task-(?<task>[^_]+))?', ...
+%                   '(?:_run-(?<run>\d+))?', ...
+%                   '(?:_eeg_prep)?(?:\.set)?$'];  
+% Out5 = study.extract_epoch( ...
+%       'study_path', '/media/NAS/EEGdata/METH/derivatives/prep_mid', ...
+%       'searchstring', 'sub-.*\_ses-pre_task-mid_run-1_eeg_prep.set$', ...
+%       'subject_parser',subject_parser , ...
+%       'markers', {'C101','C102','C103'});
 
 %% ---- Parse Name–Value inputs
 p = inputParser; p.FunctionName = 'extract_study_epoch';
@@ -161,7 +172,7 @@ markers = cellstr(opt.markers);
 % ---- Normalize aliases into two simple parallel lists (no containers.Map)
 [alias_mk, alias_cond] = normalizeAliasPairs(opt.aliases);
 
-%% ---- Find .set files (use your filesearch_regexp)
+%% ---- Find .set files (use filesearch_regexp)
 [paths, names] = filesearch_regexp(opt.study_path, opt.searchstring, opt.recursive);
 setFiles = fullfile(paths, names);
 assert(~isempty(setFiles), 'No .set files matched searchstring in study_path.');
@@ -195,8 +206,12 @@ summary_file = {};
 
 for i = 1:numel(setFiles)
     fpath = setFiles{i};
-    [subID, ~] = parseSubSesFromFile(fpath, opt.subject_parser);
-    subKey = makeFieldKey(subID);
+        [subID, sesID] = parseSubSesFromFile(fpath, opt.subject_parser);
+        if ~isempty(sesID)
+            subKey = makeFieldKey(sprintf('%s-%s', subID, sesID));  % sub-2005-pre
+        else
+            subKey = makeFieldKey(subID);
+        end
 
     if ~isfield(Out, subKey)
         Out.(subKey) = struct();   % no subject_id/session fields
@@ -253,10 +268,10 @@ for i = 1:numel(setFiles)
         firstMetaLocked   = true;
     else
         if EEG.srate ~= Out.meta.fs
-            warns{end+1} = sprintf('[WARN] %s: srate %g != meta.fs %g', subID, EEG.srate, Out.meta.fs);
+            warns{end+1} = sprintf('[WARN] %s: srate %g != meta.fs %g', subKey, EEG.srate, Out.meta.fs);
         end
         if numel(EEG.chanlocs) ~= numel(Out.meta.chanlocs)
-            warns{end+1} = sprintf('[WARN] %s: channel count differs from first file', subID);
+            warns{end+1} = sprintf('[WARN] %s: channel count differs from first file', subKey);
         end
     end
 
@@ -286,16 +301,16 @@ for i = 1:numel(setFiles)
 
 
             % ---- add to summary
-            summary_sub{end+1,1}  = subID; 
+            summary_sub{end+1,1}  = subKey; 
             summary_cond{end+1,1} = condKey;
             summary_n(end+1,1)    = size(data,3);
             summary_file{end+1,1} = fpath;
 
         catch ME
-            warns{end+1} = sprintf('[WARN] %s / %s: %s', subID, condName, ME.message);
+            warns{end+1} = sprintf('[WARN] %s / %s: %s', subKey, condName, ME.message);
             Out.(subKey).(condKey) = [];
             % add zero-row to summary
-            summary_sub{end+1,1}  = subID;
+            summary_sub{end+1,1}  = subKey;
             summary_cond{end+1,1} = condKey;
             summary_n(end+1,1)    = 0;
             summary_file{end+1,1} = fpath;
@@ -394,7 +409,7 @@ end
 
 function [subID, sesID] = parseSubSesFromFile(fpath, parserPattern)
     [~,fname,~] = fileparts(fpath);
-    m = regexp(fname, parserPattern, 'names');
+    m = regexp(fname, parserPattern, 'names','once');
     assert(~isempty(m) && isfield(m,'sub'), 'Failed to parse subject from: %s', fname);
     subID = m.sub;
     if isfield(m,'ses') && ~isempty(m.ses), sesID = m.ses; else, sesID = ''; end

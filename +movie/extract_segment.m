@@ -228,8 +228,12 @@ quality_reports = {};
 
 for i = 1:numel(setFiles)
     fpath = setFiles{i};
-    [subID, ~] = parseSubSesFromFile(fpath, opt.subject_parser);
-    subKey = makeFieldKey(subID);
+        [subID, sesID] = parseSubSesFromFile(fpath, opt.subject_parser);
+        if ~isempty(sesID)
+            subKey = makeFieldKey(sprintf('%s-%s', subID, sesID));  % sub-2005-pre
+        else
+            subKey = makeFieldKey(subID);
+        end
 
     try
         % Load

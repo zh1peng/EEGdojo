@@ -319,8 +319,12 @@ end % ===== main =====
 function row = qc_one_file(fpath, opt)
     % Per-file QC wrapper returning a 1-row table with metrics + subject + file
     try
-        [subID, ~] = parseSubSesFromFile(fpath, opt.subject_parser);
-        subKey = makeFieldKey(subID);
+        [subID, sesID] = parseSubSesFromFile(fpath, opt.subject_parser);
+        if ~isempty(sesID)
+            subKey = makeFieldKey(sprintf('%s-%s', subID, sesID));  % sub-2005-pre
+        else
+            subKey = makeFieldKey(subID);
+        end
 
         EEG = pop_loadset(fpath);
 
