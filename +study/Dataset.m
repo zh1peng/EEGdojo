@@ -31,7 +31,8 @@ classdef Dataset
                 warning('No subject data fields (e.g., sub_01) found in the input structure.');
                 obj.subjects = {};
             else
-                obj.subjects = cellfun(@(x) x(5:end), sub_fields, 'UniformOutput', false);
+                % obj.subjects = cellfun(@(x) x(5:end), sub_fields, 'UniformOutput', false);
+                obj.subjects =sub_fields ;
             end
 
             % Store metadata from the 'meta' field
@@ -65,7 +66,7 @@ classdef Dataset
             end
 
             data_matrix = [];
-            sub_field = ['sub_' subject_id];
+            sub_field = subject_id;
 
             if isfield(obj.data, sub_field)
                 if isfield(obj.data.(sub_field), condition_name)
