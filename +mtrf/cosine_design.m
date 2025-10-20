@@ -1,4 +1,4 @@
-function Xb = convolve_basis_design(Xraw, B)
+function Xb = cosine_design(Xraw, B)
 % CONVOLVE_BASIS_DESIGN Convolves features with basis functions.
 %
 %   Xb = convolve_basis_design(Xraw, B)

@@ -1,4 +1,4 @@
-function B = build_cosine_basis(lags_ms, centers_ms, width_ms)
+function B = build_cosine(lags_ms, centers_ms, width_ms)
 % BUILD_COSINE_BASIS Generates a basis set of overlapping raised cosines.
 %
 %   B = build_cosine_basis(lags_ms, centers_ms, width_ms)
