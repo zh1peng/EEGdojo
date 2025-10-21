@@ -1,4 +1,4 @@
-function out = mtrf_fit(Y, X, cov, fs, varargin)
+function out = mtrf_fit_old(Y, X, cov, fs, varargin)
 %MTRF_FIT  Forward mTRF for one continuous run (+ circular-shift surrogates).
 %
 %   out = mtrf_fit(Y, X, cov, fs, ...)

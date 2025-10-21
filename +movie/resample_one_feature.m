@@ -4,71 +4,76 @@ function y_tgt = resample_one_feature(t_src, y_src, t_tgt, mode, varargin)
 % y_tgt = resample_one_feature(t_src, y_src, t_tgt, mode, 'Name', Value, ...)
 %
 % Inputs
-%   t_src : [T x 1] source time stamps (seconds, irregular OK)
-%   y_src : [T x 1] source values (numeric)
-%   t_tgt : [K x 1] target time grid (seconds)
-%   mode  : 'hold'   -> step-wise/previous-hold (counts/binary/categorical)
-%           'interp' -> continuous interpolation (e.g., brightness, loudness)
+%   t_src : [T x 1] source timestamps in seconds (irregular OK)
+%   y_src : [T x 1] source values (numeric/logical)
+%   t_tgt : [K x 1] target time grid in seconds (uniform EEG grid, etc.)
+%   mode  : 'hold'   -> step-wise (zero-order hold / previous value)
+%           'interp' -> continuous interpolation ('pchip' or 'linear')
 %
 % Name-Value options
-%   'InterpMethod' : interpolation for 'interp' mode: 'pchip' (default) | 'linear'
+%   'InterpMethod' : interpolation for 'interp' mode:
+%                    'pchip' (default) | 'linear'
 %   'OffsetSec'    : shift source times by this many seconds (default 0)
-%   'Fill'         : fill strategy for NaNs: 'ffill' (default) | 'bfill' | 'zero' | 'none'
+%   'Fill'         : handle NaNs after resampling:
+%                    'ffill' (default) -> forward-fill internal NaNs
+%                    'bfill'           -> back-fill internal NaNs
+%                    'zero'            -> set NaNs to 0
+%                    'none'            -> leave NaNs
 %
 % Visualization (optional)
 %   'MakePlot'     : true/false to show a sanity plot (default: false)
 %   'Ax'           : axis handle to draw into (default: [])
 %   'PlotWindow'   : [t0 t1] seconds to zoom plot (default: [])
-%   'SourceStyle'  : struct with fields for the source scatter (e.g., MarkerSize)
-%   'TargetStyle'  : struct with fields for the target line   (e.g., LineWidth)
+%   'SourceStyle'  : struct for the source scatter (e.g., MarkerSize)
+%   'TargetStyle'  : struct for the target line   (e.g., LineWidth)
 %   'Title'        : custom title string (default auto)
 %
 % Output
 %   y_tgt : [K x 1] resampled values aligned to t_tgt
 %
 % Notes
-% - Handles irregular/duplicate t_src (keeps first occurrence, stable).
-% - Robust to NaNs/Infs; final non-finite samples are set to 0 unless Fill='none'.
-% - 'hold' produces a boxcar/step function (last value carried forward).
+% - Designed for naturalistic annotations:
+%     * Impulse-like/binary/categorical → use mode='hold'
+%     * Continuous (brightness/loudness/etc.) → mode='interp'
+% - By default, this function does NOT extrapolate outside the source time
+%   range. For impulses this avoids “turning on” events before they exist.
+% - In 'hold' mode we forward-fill *internal* gaps only (no future leakage).
+% - Timestamps are sorted; duplicate t_src are collapsed (keeps first).
+% - Final non-finite samples are set to 0 unless Fill='none'.
 %
 % -------------------------------------------------------------------------
-% Examples
+% Examples (paste into Command Window)
 %
-% % Example 1: Simple hold-resample (boxcar counts)
-% t_src = (0:0.5:10)';              % source sampled every 0.5 s
-% y_src = randi([0 3], size(t_src));% discrete counts
-% t_tgt = (0:0.01:10)';             % target grid at 100 Hz
+% % Example 1: Simple hold-resample (binary/impulse labels at 10 Hz → 128 Hz)
+% t_src = (0:0.1:5)';                      % 10 Hz
+% y_src = double(t_src==1.0 | t_src==3.2); % impulse-like
+% t_tgt = (0:1/128:5)';                    % 128 Hz EEG grid
 % y_tgt = resample_one_feature(t_src, y_src, t_tgt, 'hold', ...
-%     'MakePlot', true);
+%     'MakePlot', true, 'Title','Impulse → hold (no extrap)');
 %
 % % Example 2: Continuous interpolation of a smooth feature
-% t_src = (0:0.2:5)';               % source sampled at 5 Hz
-% y_src = sin(2*pi*0.5*t_src);      % continuous sine wave
-% t_tgt = (0:0.01:5)';              % resample to 100 Hz
+% t_src = (0:0.2:5)';                      % 5 Hz
+% y_src = sin(2*pi*0.5*t_src);             % continuous
+% t_tgt = (0:0.01:5)';                      % 100 Hz
 % y_tgt = resample_one_feature(t_src, y_src, t_tgt, 'interp', ...
 %     'InterpMethod','pchip', ...
-%     'MakePlot', true, ...
-%     'PlotWindow', [0 2]);
+%     'MakePlot', true, 'PlotWindow', [0 2], ...
+%     'Title','Continuous → pchip');
 %
-% % Example 3: Apply offset and zero-fill missing values
-% t_src = [0 1 3 4]';               % irregular timestamps
-% y_src = [10 NaN 30 40]';          % contains a NaN
-% t_tgt = (0:0.5:5)';               % target grid
+% % Example 3: Irregular timestamps, offset and zero-fill
+% t_src = [0 1 3 4]';  y_src = [10 NaN 30 40]';
+% t_tgt = (0:0.5:5)';   % 2 Hz target
 % y_tgt = resample_one_feature(t_src, y_src, t_tgt, 'interp', ...
-%     'OffsetSec', 0.2, ...
-%     'Fill','zero', ...
-%     'MakePlot', true, ...
-%     'Title','Offset + Zero Fill');
+%     'OffsetSec', 0.2, 'Fill','zero', 'MakePlot', true, ...
+%     'Title','Offset + zero-fill');
 %
-% % Example 4: Custom plotting styles and axes
+% % Example 4: Custom plotting styles and provided axes
 % ax = subplot(2,1,1);
 % y_tgt = resample_one_feature(t_src, y_src, t_tgt, 'hold', ...
 %     'MakePlot', true, 'Ax', ax, ...
 %     'SourceStyle', struct('Marker','s','Color','r'), ...
 %     'TargetStyle', struct('Color','g','LineWidth',2));
-%
 % -------------------------------------------------------------------------
-
 
 % -------------------- parse options --------------------
 p = inputParser;
@@ -91,50 +96,62 @@ t_src = t_src(:) + opt.OffsetSec;
 y_src = y_src(:);
 t_tgt = t_tgt(:);
 
-% Drop NaN times
+% Drop NaN/Inf times
 ok = isfinite(t_src);
 t_src = t_src(ok);
 y_src = y_src(ok);
 
-% Handle duplicates (keep first occurrence, stable)
-[tu, ia] = unique(t_src, 'stable');
-if numel(tu) < numel(t_src)
-    % Duplicate timestamps found; keep first occurrences.
-end
-t_src = tu; y_src = y_src(ia);
-
-% If nothing usable, return zeros
+% If nothing usable, return zeros (and optional plot)
 if isempty(t_src) || isempty(y_src) || all(~isfinite(y_src))
     y_tgt = zeros(size(t_tgt));
     if opt.MakePlot, local_plot(t_src, y_src, t_tgt, y_tgt, opt, mode); end
     return;
 end
 
-% -------------------- resample --------------------
+% Sort ascending (interp1 expects monotonic x)
+[ts, ord] = sort(t_src, 'ascend');
+ys = y_src(ord);
+
+% Handle duplicates on the sorted axis (keep first; change to 'last'/'sum' if needed)
+[tu, ia] = unique(ts, 'stable');
+t_src = tu;
+y_src = ys(ia);
+
+% -------------------- resample (no extrap by default) --------------------
+% Edge policy: for stick-like features, set values outside source support to zero
+edge_left_zero  = true;
+edge_right_zero = true;
+
 switch lower(mode)
     case 'hold'
-        % Step/hold interpolation: carry last value forward
-        y = interp1(t_src, y_src, t_tgt, 'previous', 'extrap');
-        % Fill any internal gaps
-        y = fillmissing(y,'previous');
-        y = fillmissing(y,'next');
+        % Step/hold (previous) WITHOUT extrapolation
+        y = interp1(t_src, y_src, t_tgt, 'previous');
+        % Internal gaps only: forward-fill (no look-ahead)
+        y = fillmissing(y, 'previous');
 
     case 'interp'
-        % Continuous interpolation
-        y = interp1(t_src, y_src, t_tgt, opt.InterpMethod, 'extrap');
+        % Continuous interpolation WITHOUT extrapolation
+        y = interp1(t_src, y_src, t_tgt, opt.InterpMethod);
 
     otherwise
         error('Unknown mode "%s". Use "hold" or "interp".', mode);
 end
 
-% -------------------- post-fill --------------------
+% -------------------- edges and post-fill --------------------
+% Identify target samples outside the source support
+left_edge  = t_tgt < t_src(1);
+right_edge = t_tgt > t_src(end);
+
+% Apply edge policy (zeros for impulses; change if sustained labels desired)
+if edge_left_zero,  y(left_edge)  = 0; end
+if edge_right_zero, y(right_edge) = 0; end
+
+% Now address any remaining internal NaNs based on requested Fill policy
 switch lower(opt.Fill)
-    case 'ffill'
-        y = fillmissing(y,'previous');
-        y = fillmissing(y,'next');
-    case 'bfill'
-        y = fillmissing(y,'next');
-        y = fillmissing(y,'previous');
+    case 'ffill'   % forward fill internal NaNs only
+        y = fillmissing(y, 'previous');
+    case 'bfill'   % back fill internal NaNs only
+        y = fillmissing(y, 'next');
     case 'zero'
         y(~isfinite(y)) = 0;
     case 'none'

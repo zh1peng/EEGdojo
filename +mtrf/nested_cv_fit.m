@@ -286,25 +286,36 @@ function score = eval_select_metric(select_metric, Yte_orig, Yte_z, Yhat_z, muY,
 % EVAL_SELECT_METRIC  Apply the right space for selection metric.
 switch lower(char(select_metric))
     case {'corr','spearman'}
-        % Use z-space (Fisher-z mean corr or mean Spearman)
+        % z-space metrics
         if strcmpi(select_metric,'corr')
             score = fisher_mean_colwise_corr(Yte_z, Yhat_z);
         else
             score = spearman_mean(Yte_z, Yhat_z);
         end
+
     case {'mse','r2'}
-        % Use ORIGINAL units: unscale predictions then score
+        % ORIGINAL units: unscale predictions and targets consistently.
         Yhat = unscale_from_z(Yhat_z, muY, sdY);
-        if strcmpi(select_metric,'mse')
-            score = -mean((Yte_orig - Yhat).^2, 'all', 'omitnan'); % higher=better
+        if isempty(Yte_orig)
+            % Inner-CV case: unscale the z-scored Y to original units
+            Yte_use = unscale_from_z(Yte_z, muY, sdY);
         else
-            score = mean(r2_cols(Yte_orig, Yhat), 'omitnan');
+            % Outer-CV/test case: original Y provided
+            Yte_use = Yte_orig;
         end
+
+        if strcmpi(select_metric,'mse')
+            % Higher is better -> negate MSE
+            score = -mean((Yte_use - Yhat).^2, 'all', 'omitnan');
+        else
+            score = mean(r2_cols(Yte_use, Yhat), 'omitnan');
+        end
+
     otherwise
-        % assume custom handle provided upstream (already applied)
         error('Unknown SelectMetric in eval_select_metric dispatch.');
 end
 end
+
 
 function M = metrics_panel_dual(Y_orig, Yhat_orig, Y_z, Yhat_z)
 % METRICS_PANEL_DUAL  Record many metrics with correct spaces:
@@ -519,7 +530,7 @@ end
 end
 
 %% ======================= Ridge train/predict ============================
-function M = train_ridge(Xz, Yz, lambda)
+function M = train_ridge(X, Y, lambda)
 % TRAIN_RIDGE  Fit ridge regression (z-space). Swap in your ridge if desired.
 %   M.W maps Xz -> Yz
 [n, p] = size(X);
@@ -578,4 +589,13 @@ end
 function v = getOr(S, f, d)
 % GETOR  Get S.(f) or default d if missing/empty.
 if isfield(S,f) && ~isempty(S.(f)), v = S.(f); else, v = d; end
+end
+
+function lbl = metric_label(metric)
+% METRIC_LABEL  String label for the selected tuning metric.
+if isa(metric,'function_handle')
+    lbl = 'customMetric';
+else
+    lbl = char(metric);
+end
 end

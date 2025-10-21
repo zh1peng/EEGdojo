@@ -78,9 +78,9 @@ ip.addParameter('lags_ms', -100:10:500, @isnumeric);
 ip.addParameter('centers_ms', [], @isnumeric);
 ip.addParameter('width_ms', [], @isnumeric);
 ip.addParameter('zeropad', true, @islogical);
+ip.addParameter('orth', true, @islogical);
 ip.addParameter('pad', 'zero', @(s) any(strcmpi(s,{'zero','nan','edge'})));
-
-
+ip.addParameter('ShowDesign', true, @islogical);
 ip.addParameter('Mode','assess');
 ip.addParameter('Model','ridge');
 ip.addParameter('ParamGrid', struct('lambda', 2.^(0:2:18)));
@@ -117,7 +117,15 @@ switch designType
     case 'cosine'
         % Build raised-cosine basis & convolve features (your functions)
         B = mtrf.build_cosine(opt.lags_ms, opt.centers_ms, opt.width_ms);  % [L x K]
-        Xdesign = mtrf.cosine_design(Xraw, B);                              % [T x (F*K)]
+        
+        if opt.orth
+            [Q,~] = qr(B,0);      % Q: L×K with Q'Q = I
+            Xdesign = mtrf.cosine_design(Xraw, Q); 
+        else
+            Xdesign = mtrf.cosine_design(Xraw, B);
+        end
+
+                                     % [T x (F*K)]
         lag_samp = round(opt.lags_ms .* fs ./ 1000);                  % for metadata
         % cosine_design generally returns T rows; handle NaNs below
 
@@ -125,6 +133,16 @@ switch designType
         error('mtrf_fit: unknown DesignType "%s".', opt.DesignType);
 end
 
+if isfield(opt,'ShowDesign')&&opt.ShowDesign
+    mtrf.show_design_matrix(Xraw,fs,'DesignType',...
+                    designType,'lags_ms',...
+                    opt.lags_ms,'zeropad',...
+                    opt.zeropad,'pad',opt.pad,...
+                    'centers_ms',opt.centers_ms,...
+                    'width_ms',opt.width_ms,...
+                    'orth',isfield(opt,'orth')&&opt.orth,'FeatureNames',opt.VariableNames,...
+                    'Title',sprintf('Design preview (%s)',designType)); 
+end
 
 
 % ---------- 2) Handle NaNs / alignment ----------
@@ -184,14 +202,15 @@ if isfield(cvOUT, 'deploy') && ~isempty(cvOUT.deploy)
 
         switch designType
             case 'lagged'
-                L = numel(opt.lags_ms);    % or numel(lag_samp)
-                Ktmp = 1;                  % identity basis conceptually
-                Fused = size(Wcore,1) / (L*Ktmp);
+                L = numel(opt.lags_ms);
+                Fused = size(Wcore,1) / L;
                 if mod(size(Wcore,1), L) ~= 0
                     warning('mtrf_fit: shape mismatch for lagged reshape; skipping TRF.');
                 else
-                    WLF = reshape(Wcore, L, Fused, M);  % [L x F x M]
-                    TRF_lag_eff = WLF;
+                    % Columns are lag-major: [lag1 x F, lag2 x F, ...]
+                    % Reshape as [F, L, M] then permute -> [L, F, M]
+                    WFLM = reshape(Wcore, [Fused, L, M]);   % [F x L x M]
+                    TRF_lag_eff = permute(WFLM, [2, 1, 3]); % [L x F x M]
                 end
 
             case 'cosine'
@@ -256,3 +275,4 @@ end
 function v = iff(cond, a, b)
 if cond, v = a; else, v = b; end
 end
+
