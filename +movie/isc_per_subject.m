@@ -21,7 +21,7 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %       - 'corr' → C = corrcoef(windowed Y), bounded [-1,1].
 %       - 'cov'  → C = cov(windowed Y), variance-scaled (not bounded).
 %   'fisherZ'      : logical (default: true)
-%       If true and pairMetric='corr', apply Fisher z-transform **to ISCPair only**.
+%       If true and pairMetric='corr', apply Fisher z-transform **to ISCpair only**.
 %       (LOSO-ISC is computed directly from C; do not z-transform C beforehand.)
 %
 % OUTPUTS
@@ -29,7 +29,7 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %             If timeResolved=true  -> [N x T]  (per-subject ISC at each time center)
 %   meta    : struct with fields: .T, .N, .timeResolved, .winLength, .edgeMode,
 %                                 .pairMetric, .fisherZ
-%   ISCPair : Pairwise subject-by-subject similarity
+%   ISCpair : Pairwise subject-by-subject similarity
 %             If timeResolved=false -> [N x N]
 %             If timeResolved=true  -> [N x N x T]
 %
@@ -40,12 +40,12 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %       ISC_i = Rb_i / (Rw_i + eps)
 %     If pairMetric='corr' (so C has unit diagonal), this simplifies to the
 %     **arithmetic mean of off-diagonal correlations** for subject i.
-%   - For RSA, use ISCPair (N×N or N×N×T). If averaging correlations, prefer
-%     Fisher z on ISCPair slices, average in z, then tanh back.
+%   - For RSA, use ISCpair (N×N or N×N×T). If averaging correlations, prefer
+%     Fisher z on ISCpair slices, average in z, then tanh back.
 
 % Fisher-z handling (important):
-%   • ISCPair (pairwise):
-%       If pairMetric='corr' AND fisherZ=true, ISCPair is returned in
+%   • ISCpair (pairwise):
+%       If pairMetric='corr' AND fisherZ=true, ISCpair is returned in
 %       Fisher-z space (z = atanh(r)). Averaging and statistical tests on
 %       pairwise correlations should be performed in z-space, with results
 %       back-transformed using tanh for reporting.
@@ -118,12 +118,12 @@ if ~opt.timeResolved
 
     % Pairwise matrix (same metric) — gated
     if wantPair
-        ISCPair = C;
+        ISCpair = C;
         if opt.fisherZ && opt.pairMetric == "corr"
-            ISCPair = atanh(max(min(ISCPair, 0.999999), -0.999999)); % Fisher z
+            ISCpair = atanh(max(min(ISCpair, 0.999999), -0.999999)); % Fisher z
         end
     else
-        ISCPair = [];
+        ISCpair = [];
     end
     return;
 end
@@ -143,9 +143,9 @@ h = floor((w-1)/2);
 
 ISC     = nan(N, T, 'like', Y);      % per-subject ISC
 if wantPair
-    ISCPair = nan(N, N, T, 'like', Y); % pairwise matrices
+    ISCpair = nan(N, N, T, 'like', Y); % pairwise matrices
 else
-    ISCPair = [];                      % not computed / not allocated
+    ISCpair = [];                      % not computed / not allocated
 end
 
 switch opt.edgeMode
@@ -282,7 +282,7 @@ end
 % max_cov  = max(abs(diff_cov),[],'omitnan');
 % fprintf('CorrCA(cov) vs Ours(cov): MAE=%.4g, max|Δ|=%.4g\n', mae_cov, max_cov);
 
-% %% ---------- 4) Recover LOSO from ISCPair (corr): should match ----------
+% %% ---------- 4) Recover LOSO from ISCpair (corr): should match ----------
 % % off-diagonal mask (not strictly needed with vectorized sum below)
 % N = size(ISCPair_corr,1);
 
