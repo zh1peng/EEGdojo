@@ -85,7 +85,7 @@ P.addParameter('winLength',    [],    @(x)isempty(x) || (isscalar(x) && x>=2 && 
 P.addParameter('edgeMode',     'shrink', @(s)ischar(s) || isstring(s));
 P.addParameter('pairMetric',   'corr', @(s) any(strcmpi(string(s),["corr","cov"])));
 P.addParameter('fisherZ',      true, @(x)islogical(x)&&isscalar(x));
-P.addParameter('pairwise',     [], @(x) isempty(x) || (islogical(x) && isscalar(x)));
+P.addParameter('pairwise',     false, @(x) isempty(x) || (islogical(x) && isscalar(x)));
 P.parse(varargin{:});
 opt = P.Results;
 

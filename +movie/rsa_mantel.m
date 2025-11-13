@@ -1,4 +1,4 @@
-function stats = isc_rsa(S_neural, S_behav, varargin)
+function stats = rsa_mantel(S_neural, S_behav, varargin)
 % ISC_RSA  Intersubject RSA: correlate neural ISC with behavioral similarity.
 %
 %   stats = isc_rsa(S_neural, S_behav, 'Name',Value,...)
