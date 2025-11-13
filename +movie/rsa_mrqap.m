@@ -195,6 +195,7 @@ end
 obs_stat = beta_obs; if useT, obs_stat = t_obs; end
 
 stats.beta = beta_obs;
+stats.beta_main = beta_obs(2);
 stats.se   = se_obs;
 stats.tval = t_obs;
 stats.ols  = ols_info;
