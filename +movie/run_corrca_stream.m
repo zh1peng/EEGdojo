@@ -96,9 +96,20 @@ if opt.verbose, fprintf('[stream] Scanning %d subjects to infer common T and D..
 % D = D0;
 % T = min(lens(valid));
 N = numel(setFiles);
-Xi = preproc_one(setFiles{1}, opt);   % [D x Ti]
-D = size(Xi,1);
-T = size(Xi,2);
+% Modified Pass 0 section
+if ~isempty(opt.expected_length)
+    T = opt.expected_length;
+    fprintf('[stream] Enforcing fixed T=%d provided by user.\n', T);
+    % Just load one file to get D (channels)
+    Xi = preproc_one(setFiles{1}, opt);
+    D = size(Xi,1);
+else
+    % Fallback to your original logic if expected_length is not provided
+    Xi = preproc_one(setFiles{1}, opt);
+    D = size(Xi,1);
+    T = size(Xi,2);
+end
+
 if opt.verbose, fprintf('[stream] Using D=%d channels, T=%d samples, N=%d subjects.\n', D, T, N); end
 
 % ---------- Pass 1: accumulate S and U (CorrCA v2, demeaned over time) ----------
