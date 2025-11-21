@@ -16,22 +16,39 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %       If even is given, it will be incremented by 1 for symmetry.
 %   'edgeMode'     : 'shrink' (default) | 'reflect' | 'replicate'
 %       Edge handling for time-resolved mode.
+%           shrink    = “don’t invent data; accept shorter windows near edges”
+%           reflect   = “invent data by mirroring the signal”
+%           replicate = “invent data by holding the edge value constant”
 %   'pairMetric'   : 'corr' (default) | 'cov'
-%       Subject-by-subject similarity metric used **consistently** for LOSO-ISC and ISCPair.
+%       Subject-by-subject similarity metric used **consistently** for LOSO-ISC and ISCpair.
 %       - 'corr' → C = corrcoef(windowed Y), bounded [-1,1].
 %       - 'cov'  → C = cov(windowed Y), variance-scaled (not bounded).
 %   'fisherZ'      : logical (default: true)
 %       If true and pairMetric='corr', apply Fisher z-transform **to ISCpair only**.
 %       (LOSO-ISC is computed directly from C; do not z-transform C beforehand.)
+%   'pairwise'     : logical (default: false)
+%       If true and timeResolved=true, compute ISCpair over time (N x N x T).
+%       If false in timeResolved mode, ISCpair is [] unless static.
+%   'step'         : positive integer (default: 1)
+%       Step size (in samples) between successive window centers in time-resolved mode.
+%       step = 1 → center at every time point (maximal overlap).
+%   'overlap'      : scalar in [0,1) or [] (default: [])
+%       Desired overlap fraction between consecutive windows in time-resolved mode.
+%       If non-empty, this overrides 'step' via:
+%           step = max(1, floor(winLength * (1 - overlap))).
+%       Example: winLength=100, overlap=0.8 → step=20 (80% overlap).
 %
 % OUTPUTS
 %   ISC     : If timeResolved=false -> [N x 1]  (per-subject LOSO-like ISC over full time)
 %             If timeResolved=true  -> [N x T]  (per-subject ISC at each time center)
-%   meta    : struct with fields: .T, .N, .timeResolved, .winLength, .edgeMode,
-%                                 .pairMetric, .fisherZ
+%                Only time points used as centers have non-NaN values; others are NaN.
+%   meta    : struct with fields:
+%               .T, .N, .timeResolved, .winLength, .edgeMode,
+%               .pairMetric, .fisherZ, .pairwiseComputed,
+%               .step, .overlap, .centerIdx
 %   ISCpair : Pairwise subject-by-subject similarity
 %             If timeResolved=false -> [N x N]
-%             If timeResolved=true  -> [N x N x T]
+%             If timeResolved=true  -> [N x N x T] (NaN at unused centers)
 %
 % NOTES
 %   - LOSO-ISC is computed from the N×N similarity matrix C via:
@@ -42,7 +59,7 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %     **arithmetic mean of off-diagonal correlations** for subject i.
 %   - For RSA, use ISCpair (N×N or N×N×T). If averaging correlations, prefer
 %     Fisher z on ISCpair slices, average in z, then tanh back.
-
+%
 % Fisher-z handling (important):
 %   • ISCpair (pairwise):
 %       If pairMetric='corr' AND fisherZ=true, ISCpair is returned in
@@ -58,13 +75,8 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %       — With pairMetric='cov', ISC is variance-scaled and WILL NOT equal
 %         the mean of off-diagonal covariances (by design).
 %
-% Rationale:
-%   Pairwise correlations are not additive; Fisher-z (atanh) makes them
-%   approximately normal/additive for averaging. LOSO ISC is commonly
-%   reported in correlation units for interpretability and comparability.
-%
 % Recommended usage:
-%   • For RSA and any averaging over ISCPair: set fisherZ=true, perform
+%   • For RSA and any averaging over ISCpair: set fisherZ=true, perform
 %     all averaging/stats in z-space, then tanh back for display.
 %   • For plots and descriptive results: show ISC in correlation units
 %     (if 'corr'). If you run parametric stats across subjects on ISC,
@@ -72,9 +84,12 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %     back-transformed estimates.
 % v2.1 (2025) – unified metric control; static + time-resolved.
 % v2.2 (2025) – avoid to give ISCpair.
+% v2.3 (2025) – support time-resolved step / overlap control.
+
 % ---------- Validate input ----------
 if ndims(Y) ~= 2
-    error('isc_per_subject:2Donly', 'Y must be 2-D [T x N]. If 3-D, collapse to 2-D before calling.');
+    error('isc_per_subject:2Donly', ...
+        'Y must be 2-D [T x N]. If 3-D, collapse to 2-D before calling.');
 end
 [T, N] = size(Y);
 
@@ -86,6 +101,8 @@ P.addParameter('edgeMode',     'shrink', @(s)ischar(s) || isstring(s));
 P.addParameter('pairMetric',   'corr', @(s) any(strcmpi(string(s),["corr","cov"])));
 P.addParameter('fisherZ',      true, @(x)islogical(x)&&isscalar(x));
 P.addParameter('pairwise',     false, @(x) isempty(x) || (islogical(x) && isscalar(x)));
+P.addParameter('step',         1, @(x)isscalar(x) && x>=1 && x==floor(x));
+P.addParameter('overlap',      [], @(x)isempty(x) || (isscalar(x) && x>=0 && x<1));
 P.parse(varargin{:});
 opt = P.Results;
 
@@ -108,7 +125,10 @@ meta = struct('T',T,'N',N, ...
               'edgeMode',char(opt.edgeMode), ...
               'pairMetric',char(opt.pairMetric), ...
               'fisherZ',logical(opt.fisherZ), ...
-              'pairwiseComputed',logical(wantPair));
+              'pairwiseComputed',logical(wantPair), ...
+              'step',[], ...
+              'overlap',[], ...
+              'centerIdx',[]);
 
 % ---------- Static branch ----------
 if ~opt.timeResolved
@@ -125,6 +145,8 @@ if ~opt.timeResolved
     else
         ISCpair = [];
     end
+
+    % meta.step/overlap irrelevant in static mode
     return;
 end
 
@@ -141,6 +163,24 @@ if mod(w,2)==0
 end
 h = floor((w-1)/2);
 
+% Determine step from overlap or step parameter
+if ~isempty(opt.overlap)
+    if opt.overlap < 0 || opt.overlap >= 1
+        error('isc_per_subject:badOverlap', ...
+            'overlap must be in [0,1). Got %.3f.', opt.overlap);
+    end
+    step = max(1, floor(w * (1 - opt.overlap)));
+else
+    step = opt.step;
+end
+
+% Store in meta (time-resolved)
+meta.winLength = w;
+meta.step      = step;
+meta.overlap   = opt.overlap;
+centerIdx      = 1:step:T;
+meta.centerIdx = centerIdx(:).';
+
 ISC     = nan(N, T, 'like', Y);      % per-subject ISC
 if wantPair
     ISCpair = nan(N, N, T, 'like', Y); % pairwise matrices
@@ -151,7 +191,7 @@ end
 switch opt.edgeMode
     case "shrink"
         % variable window length near edges
-        for t = 1:T
+        for t = centerIdx
             t1 = max(1, t - h);
             t2 = min(T, t + (w-1 - (t - t1)));
             W = Y(t1:t2, :);                      % [win x N]
@@ -164,13 +204,13 @@ switch opt.edgeMode
                 if opt.fisherZ && opt.pairMetric == "corr"
                     P = atanh(max(min(P, 0.999999), -0.999999));
                 end
-                ISCPair(:,:,t) = P;
+                ISCpair(:,:,t) = P;
             end
         end
 
     case {"reflect","replicate"}
         Ypad = pad_time(Y, h, opt.edgeMode);      % [T+2h x N]
-        for t = 1:T
+        for t = centerIdx
             idx = t:(t+w-1);
             W = Ypad(idx, :);                     % [w x N]
             C = safe_gram(W, opt.pairMetric);
@@ -181,7 +221,7 @@ switch opt.edgeMode
                 if opt.fisherZ && opt.pairMetric == "corr"
                     P = atanh(max(min(P, 0.999999), -0.999999));
                 end
-                ISCPair(:,:,t) = P;
+                ISCpair(:,:,t) = P;
             end
         end
 
@@ -230,7 +270,7 @@ function Ypad = pad_time(Y, h, mode)
 % Y: [T x N] -> Ypad: [T+2h x N]
 [T, ~] = size(Y);
 if h <= 0, Ypad = Y; return; end
-switch mode
+switch string(mode)
     case "reflect"
         hL = min(h, T-1);
         hR = min(h, T-1);
@@ -245,111 +285,3 @@ switch mode
         error('pad_time:mode','Unknown pad mode: %s', mode);
 end
 end
-
-
-
-
-
-
-
-%% Sanity checks
-% %% ---------- Inputs ----------
-% % Y is assumed to be [T x D x N] from CorrCA projections, where you want D=1.
-% % If you already have [T x N], set Y2D = Y; and skip the squeeze line.
-% Y2D = squeeze(Y(:,1,:));   % [T x N], using component #1
-
-% %% ---------- 1) ISC from CorrCA package (cov-based) ----------
-% % CorrCA package function 'isc_per_subject' typically expects [T x N] (or its own format).
-% % Replace this call with the correct CorrCA API you use if different.
-% ISC1 = isc_per_subject(Y);   % returns [N x 1] LOSO-like ISC (cov-based)
-% ISCcov1 = ISC1(:,1);           % ensure it's [N x 1]
-
-% %% ---------- 2) Your unified function: cov and corr ----------
-% [ISCcov,  meta_cov,  ISCPair_cov]  = movie.isc_per_subject(Y2D, 'pairMetric','cov');
-% [ISCcorr, meta_corr, ISCPair_corr] = movie.isc_per_subject(Y2D, 'pairMetric','corr');
-
-% % Basic shape checks
-% assert(isvector(ISCcov1) && isvector(ISCcov) && isvector(ISCcorr), 'ISC outputs must be vectors.');
-% assert(numel(ISCcov1)==numel(ISCcov) && numel(ISCcov)==numel(ISCcorr), 'ISC vectors must have same length.');
-
-% N = numel(ISCcov1);
-
-% %% ---------- 3) Numeric sanity: CorrCA(cov) vs ours(cov) ----------
-% % They need not be IDENTICAL (different edge/mean conventions), but should be close if formulas match.
-% % Report MAE and max|diff|.
-% diff_cov = ISCcov - ISCcov1;
-% mae_cov  = mean(abs(diff_cov),'omitnan');
-% max_cov  = max(abs(diff_cov),[],'omitnan');
-% fprintf('CorrCA(cov) vs Ours(cov): MAE=%.4g, max|Δ|=%.4g\n', mae_cov, max_cov);
-
-% %% ---------- 4) Recover LOSO from ISCpair (corr): should match ----------
-% % off-diagonal mask (not strictly needed with vectorized sum below)
-% N = size(ISCPair_corr,1);
-
-% % Row-wise mean in z-space (exclude diagonal)
-% sum_offdiag_z = sum(ISCPair_corr, 2) - diag(ISCPair_corr);   % N x 1
-% row_means_z   = sum_offdiag_z ./ (N - 1);                    % N x 1
-
-% % Convert back to correlation units (r) for LOSO comparison
-% ISCcorr_from_pair = tanh(row_means_z);                        % N x 1 (r-space)
-
-% % Compare in r-space (LOSO from corr vs row-mean(z)->tanh)
-% diff_corr = ISCcorr - ISCcorr_from_pair;
-% mae_corr  = mean(abs(diff_corr), 'omitnan');
-% max_corr  = max(abs(diff_corr), [], 'omitnan');
-% fprintf('[r] LOSO(corr) vs row-mean z(ISCPair)->tanh: MAE=%.4g, max|Δ|=%.4g\n', mae_corr, max_corr);
-
-% % (Optional) also compare in z-space for completeness
-% % LOSO(corr) lives in r; convert to z with clipping
-% ISCcorr_z = atanh(max(min(ISCcorr, 0.999999), -0.999999));
-% diff_corr_z = ISCcorr_z - row_means_z;
-% mae_corr_z  = mean(abs(diff_corr_z), 'omitnan');
-% max_corr_z  = max(abs(diff_corr_z), [], 'omitnan');
-% fprintf('[z] atanh(LOSO(corr)) vs row-mean z(ISCPair): MAE=%.4g, max|Δ|=%.4g\n', mae_corr_z, max_corr_z);
-% %% ---------- 5) (Optional) Covariance row-mean (for reference only; not equal to LOSO-cov) ----------
-% row_means_cov = (sum(ISCPair_cov - diag(diag(ISCPair_cov)), 2) / (N-1));  % plain mean of off-diag covariances
-% diff_cov_mean = ISCcov - row_means_cov;
-% mae_cov_mean  = mean(abs(diff_cov_mean),'omitnan');
-% max_cov_mean  = max(abs(diff_cov_mean),[],'omitnan');
-% fprintf('LOSO(cov) vs row-mean cov (not expected equal): MAE=%.4g, max|Δ|=%.4g\n', mae_cov_mean, max_cov_mean);
-
-% %% ---------- 6) Plots ----------
-% % A) Trace comparison (treating subject index as x for static LOSO values)
-% figure('Name','ISC (static) comparisons'); 
-% tiledlayout(2,2, 'Padding','compact', 'TileSpacing','compact');
-
-% % A1: cov traces (CorrCA vs Ours)
-% nexttile; hold on; box on; grid on;
-% plot(ISCcov1, 'LineWidth',1.5, 'DisplayName','CorrCA cov');
-% plot(ISCcov,  'LineWidth',1.5, 'DisplayName','Ours cov');
-% xlabel('Subject'); ylabel('ISC (cov)'); title('Covariance LOSO');
-% legend('Location','best'); set(gca,'FontSize',11);
-
-% % A2: corr traces (Ours)
-% nexttile; hold on; box on; grid on;
-% plot(ISCcorr, 'LineWidth',1.5, 'DisplayName','Ours corr');
-% xlabel('Subject'); ylabel('ISC (corr)'); title('Correlation LOSO');
-% legend('Location','best'); set(gca,'FontSize',11);
-
-% % A3: differences cov (Ours - CorrCA)
-% nexttile; hold on; box on; grid on;
-% stem(diff_cov, 'filled', 'DisplayName','Ours - CorrCA');
-% xlabel('Subject'); ylabel('\Delta ISC (cov)'); title('Covariance Δ');
-% yline(0,'k-'); legend('Location','best'); set(gca,'FontSize',11);
-
-% % A4: LOSO(corr) vs row-mean(Fisher-z ISCPair) scatter
-% nexttile; hold on; box on; grid on;
-% scatter(ISCcorr_from_pair, ISCcorr, 25, 'filled');
-% refline(1,0); % 45° line
-% xlabel('Row-mean z(ISCPair) → tanh'); ylabel('LOSO (corr)');
-% title(sprintf('Corr equivalence: MAE=%.3g, max|Δ|=%.3g', mae_corr, max_corr));
-% set(gca,'FontSize',11);
-
-% %% ---------- 7) Tiny utility: pretty difference plot for corr ----------
-% figure('Name','Correlation: LOSO vs from ISCPair'); hold on; box on; grid on;
-% plot(diff_corr, 'LineWidth',1.2);
-% yline(0,'k-'); 
-% xlabel('Subject'); ylabel('\Delta (LOSO - row-mean z(ISCPair)→tanh)');
-% title('Corr: LOSO minus Fisher-z row-mean of ISCPair');
-% set(gca,'FontSize',12);
-
