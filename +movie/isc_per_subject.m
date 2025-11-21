@@ -21,70 +21,28 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %           replicate = “invent data by holding the edge value constant”
 %   'pairMetric'   : 'corr' (default) | 'cov'
 %       Subject-by-subject similarity metric used **consistently** for LOSO-ISC and ISCpair.
-%       - 'corr' → C = corrcoef(windowed Y), bounded [-1,1].
-%       - 'cov'  → C = cov(windowed Y), variance-scaled (not bounded).
 %   'fisherZ'      : logical (default: true)
 %       If true and pairMetric='corr', apply Fisher z-transform **to ISCpair only**.
-%       (LOSO-ISC is computed directly from C; do not z-transform C beforehand.)
 %   'pairwise'     : logical (default: false)
-%       If true and timeResolved=true, compute ISCpair over time (N x N x T).
-%       If false in timeResolved mode, ISCpair is [] unless static.
+%       If true and timeResolved=true, compute ISCpair over time.
 %   'step'         : positive integer (default: 1)
-%       Step size (in samples) between successive window centers in time-resolved mode.
-%       step = 1 → center at every time point (maximal overlap).
+%       Step size (samples) between successive window centers in time-resolved mode.
 %   'overlap'      : scalar in [0,1) or [] (default: [])
-%       Desired overlap fraction between consecutive windows in time-resolved mode.
-%       If non-empty, this overrides 'step' via:
+%       If non-empty, overrides 'step' as:
 %           step = max(1, floor(winLength * (1 - overlap))).
-%       Example: winLength=100, overlap=0.8 → step=20 (80% overlap).
 %
 % OUTPUTS
-%   ISC     : If timeResolved=false -> [N x 1]  (per-subject LOSO-like ISC over full time)
-%             If timeResolved=true  -> [N x T]  (per-subject ISC at each time center)
-%                Only time points used as centers have non-NaN values; others are NaN.
+%   ISC     : If timeResolved=false -> [N x 1]
+%             If timeResolved=true  -> [N x T]  when step=1 & overlap=[]
+%                                          [N x nCenter] otherwise
 %   meta    : struct with fields:
 %               .T, .N, .timeResolved, .winLength, .edgeMode,
 %               .pairMetric, .fisherZ, .pairwiseComputed,
 %               .step, .overlap, .centerIdx
-%   ISCpair : Pairwise subject-by-subject similarity
-%             If timeResolved=false -> [N x N]
-%             If timeResolved=true  -> [N x N x T] (NaN at unused centers)
+%   ISCpair : If timeResolved=false -> [N x N]
+%             If timeResolved=true  -> [N x N x T] or [N x N x nCenter] (matches ISC)
 %
-% NOTES
-%   - LOSO-ISC is computed from the N×N similarity matrix C via:
-%       Rb_i = 2*sum_{j≠i} C(i,j)
-%       Rw_i = (N-1)*C(i,i) + sum_{j≠i} C(j,j)
-%       ISC_i = Rb_i / (Rw_i + eps)
-%     If pairMetric='corr' (so C has unit diagonal), this simplifies to the
-%     **arithmetic mean of off-diagonal correlations** for subject i.
-%   - For RSA, use ISCpair (N×N or N×N×T). If averaging correlations, prefer
-%     Fisher z on ISCpair slices, average in z, then tanh back.
-%
-% Fisher-z handling (important):
-%   • ISCpair (pairwise):
-%       If pairMetric='corr' AND fisherZ=true, ISCpair is returned in
-%       Fisher-z space (z = atanh(r)). Averaging and statistical tests on
-%       pairwise correlations should be performed in z-space, with results
-%       back-transformed using tanh for reporting.
-%   • ISC (per-subject LOSO):
-%       Always computed directly from C via the ratio Rb/Rw; NO Fisher-z
-%       is applied inside this function so ISC remains in its native units
-%       (correlation if 'corr', covariance if 'cov').
-%       — With pairMetric='corr', ISC_i reduces EXACTLY to the arithmetic
-%         mean of off-diagonal correlations for subject i (in r-units).
-%       — With pairMetric='cov', ISC is variance-scaled and WILL NOT equal
-%         the mean of off-diagonal covariances (by design).
-%
-% Recommended usage:
-%   • For RSA and any averaging over ISCpair: set fisherZ=true, perform
-%     all averaging/stats in z-space, then tanh back for display.
-%   • For plots and descriptive results: show ISC in correlation units
-%     (if 'corr'). If you run parametric stats across subjects on ISC,
-%     you MAY z-transform ISC externally (zISC = atanh(rISC)) and report
-%     back-transformed estimates.
-% v2.1 (2025) – unified metric control; static + time-resolved.
-% v2.2 (2025) – avoid to give ISCpair.
-% v2.3 (2025) – support time-resolved step / overlap control.
+% v2.3 – add step/overlap, compressed time when step>1/overlap used.
 
 % ---------- Validate input ----------
 if ndims(Y) ~= 2
@@ -110,9 +68,6 @@ opt.edgeMode   = lower(string(opt.edgeMode));
 opt.pairMetric = lower(string(opt.pairMetric));
 
 % Decide whether to compute pairwise matrices
-% Default:
-%   - static: compute pairwise if caller asked for 3rd output
-%   - time-resolved: do NOT compute pairwise unless explicitly requested
 if isempty(opt.pairwise)
     wantPair = (nargout >= 3) && ~opt.timeResolved;
 else
@@ -132,21 +87,17 @@ meta = struct('T',T,'N',N, ...
 
 % ---------- Static branch ----------
 if ~opt.timeResolved
-    % LOSO-ISC from across-subject similarity over full time (consistent metric)
-    C = safe_gram(Y, opt.pairMetric);   % N x N (corr or cov)
-    ISC = isc_from_C(C);                % [N x 1]
+    C = safe_gram(Y, opt.pairMetric);   % N x N
+    ISC = isc_from_C(C);                % N x 1
 
-    % Pairwise matrix (same metric) — gated
     if wantPair
         ISCpair = C;
         if opt.fisherZ && opt.pairMetric == "corr"
-            ISCpair = atanh(max(min(ISCpair, 0.999999), -0.999999)); % Fisher z
+            ISCpair = atanh(max(min(ISCpair, 0.999999), -0.999999));
         end
     else
         ISCpair = [];
     end
-
-    % meta.step/overlap irrelevant in static mode
     return;
 end
 
@@ -173,55 +124,92 @@ if ~isempty(opt.overlap)
 else
     step = opt.step;
 end
+step = max(1, step);
 
-% Store in meta (time-resolved)
+% Centers on original time axis
+centerIdx = 1:step:T;
+nCenter   = numel(centerIdx);
+
 meta.winLength = w;
 meta.step      = step;
 meta.overlap   = opt.overlap;
-centerIdx      = 1:step:T;
 meta.centerIdx = centerIdx(:).';
 
-ISC     = nan(N, T, 'like', Y);      % per-subject ISC
-if wantPair
-    ISCpair = nan(N, N, T, 'like', Y); % pairwise matrices
+% Decide output time dimension:
+%   if step==1 and no overlap was requested -> keep legacy [N x T]
+%   else -> compressed [N x nCenter]
+useCompressed = ~(step == 1 && isempty(opt.overlap));
+
+if useCompressed
+    ISC = nan(N, nCenter, 'like', Y);
+    if wantPair
+        ISCpair = nan(N, N, nCenter, 'like', Y);
+    else
+        ISCpair = [];
+    end
 else
-    ISCpair = [];                      % not computed / not allocated
+    ISC = nan(N, T, 'like', Y);
+    if wantPair
+        ISCpair = nan(N, N, T, 'like', Y);
+    else
+        ISCpair = [];
+    end
 end
 
+% ---------- Sliding window ----------
 switch opt.edgeMode
     case "shrink"
-        % variable window length near edges
-        for t = centerIdx
+        for k = 1:nCenter
+            t  = centerIdx(k);
             t1 = max(1, t - h);
             t2 = min(T, t + (w-1 - (t - t1)));
-            W = Y(t1:t2, :);                      % [win x N]
+            W  = Y(t1:t2, :);
             if size(W,1) < 2, continue; end
-            C = safe_gram(W, opt.pairMetric);     % N x N
-            ISC(:, t) = isc_from_C(C);            % [N x 1]
 
-            if wantPair
-                P = C;                             % pairwise
-                if opt.fisherZ && opt.pairMetric == "corr"
-                    P = atanh(max(min(P, 0.999999), -0.999999));
-                end
-                ISCpair(:,:,t) = P;
-            end
-        end
-
-    case {"reflect","replicate"}
-        Ypad = pad_time(Y, h, opt.edgeMode);      % [T+2h x N]
-        for t = centerIdx
-            idx = t:(t+w-1);
-            W = Ypad(idx, :);                     % [w x N]
             C = safe_gram(W, opt.pairMetric);
-            ISC(:, t) = isc_from_C(C);
+            if useCompressed
+                ISC(:, k) = isc_from_C(C);
+            else
+                ISC(:, t) = isc_from_C(C);
+            end
 
             if wantPair
                 P = C;
                 if opt.fisherZ && opt.pairMetric == "corr"
                     P = atanh(max(min(P, 0.999999), -0.999999));
                 end
-                ISCpair(:,:,t) = P;
+                if useCompressed
+                    ISCpair(:,:,k) = P;
+                else
+                    ISCpair(:,:,t) = P;
+                end
+            end
+        end
+
+    case {"reflect","replicate"}
+        Ypad = pad_time(Y, h, opt.edgeMode);  % [T+2h x N]
+        for k = 1:nCenter
+            t   = centerIdx(k);
+            idx = t:(t+w-1);
+            W   = Ypad(idx, :);
+            C   = safe_gram(W, opt.pairMetric);
+
+            if useCompressed
+                ISC(:, k) = isc_from_C(C);
+            else
+                ISC(:, t) = isc_from_C(C);
+            end
+
+            if wantPair
+                P = C;
+                if opt.fisherZ && opt.pairMetric == "corr"
+                    P = atanh(max(min(P, 0.999999), -0.999999));
+                end
+                if useCompressed
+                    ISCpair(:,:,k) = P;
+                else
+                    ISCpair(:,:,t) = P;
+                end
             end
         end
 
@@ -235,39 +223,31 @@ end % isc_per_subject
 % ==================== Helpers ====================
 
 function C = safe_gram(W, metric)
-% Subject-by-subject similarity (corr or cov), robust to short windows.
-% W: [T_win x N] -> C: [N x N]
 if size(W,1) < 2
     C = nan(size(W,2));
     return;
 end
 switch string(metric)
     case "corr"
-        C = corrcoef(W);   % symmetric, diag=1
+        C = corrcoef(W);
     case "cov"
-        C = cov(W);        % symmetric, diag=variances
+        C = cov(W);
     otherwise
         error('safe_gram:metric','Unknown pairMetric: %s', metric);
 end
 end
 
 function isc_vec = isc_from_C(C)
-% Per-subject LOSO-ISC from an N x N similarity matrix C (corr or cov).
-% Rb_i = 2*sum_{j≠i} C(i,j)
-% Rw_i = (N-1)*C(i,i) + sum_{j≠i} C(j,j)
-% ISC_i = Rb_i / (Rw_i + eps)
 N = size(C,1);
 diagC = diag(C);
-sumOff = sum(C,2) - diagC;            % N x 1
-sumDiagOthers = sum(diagC) - diagC;   % N x 1
+sumOff = sum(C,2) - diagC;
+sumDiagOthers = sum(diagC) - diagC;
 Rb = 2 .* sumOff;
 Rw = (N-1).*diagC + sumDiagOthers;
 isc_vec = Rb ./ (Rw + eps);
 end
 
 function Ypad = pad_time(Y, h, mode)
-% Pad along time by h samples at both ends.
-% Y: [T x N] -> Ypad: [T+2h x N]
 [T, ~] = size(Y);
 if h <= 0, Ypad = Y; return; end
 switch string(mode)
