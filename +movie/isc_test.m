@@ -13,7 +13,7 @@ function out = isc_test(Y, varargin)
 %   % Core ISC computation (passed to movie.isc_per_subject)
 %   'timeResolved' (false)    : If true, compute sliding-window ISC.
 %   'winLength'    ([])       : Window length in samples. Required when timeResolved=true.
-%   'edgeMode'     ('shrink') : 'shrink' | 'reflect' | 'replicate'.
+%   'edgeMode'     ('replicate') : 'replicate' | 'reflect' | 'shrink'.
 %   'pairMetric'   ('corr')   : 'corr' | 'cov'.
 %   'fisherZ'      (true)     : Fisher-z handling when pairMetric='corr'.
 %
@@ -60,7 +60,7 @@ function out = isc_test(Y, varargin)
 P = inputParser;
 P.addParameter('timeResolved', false, @(x)islogical(x)&&isscalar(x));
 P.addParameter('winLength',    [],    @(x)isempty(x) || (isscalar(x) && x>=2 && x==floor(x)));
-P.addParameter('edgeMode',     'shrink', @(s)ischar(s) || isstring(s));
+P.addParameter('edgeMode',     'replicate', @(s)ischar(s) || isstring(s));
 
 P.addParameter('pairMetric',   'corr', @(s) any(strcmpi(string(s),["corr","cov"])));
 P.addParameter('fisherZ',      true, @(x)islogical(x)&&isscalar(x));
@@ -81,6 +81,7 @@ P.addParameter('tfceDh',       0.1,   @(x)isnumeric(x)&&isscalar(x) && x>0);
 % Runtime/logging
 P.addParameter('parallel',     true,  @(x)islogical(x)&&isscalar(x));
 P.addParameter('verbose',      true,  @(x)islogical(x)&&isscalar(x));
+P.addParameter('overlap',      [], @(x)isempty(x) || (isscalar(x) && x>=0 && x<1));
 P.parse(varargin{:});
 opt = P.Results;
 
@@ -117,7 +118,7 @@ iscArgs = {'timeResolved', opt.timeResolved, ...
            'pairMetric',   opt.pairMetric, ...
            'fisherZ',      opt.fisherZ, ...
            'edgeMode',     opt.edgeMode};
-if opt.timeResolved, iscArgs = [iscArgs, {'winLength', opt.winLength}]; end
+if opt.timeResolved, iscArgs = [iscArgs, {'winLength', opt.winLength, 'overlap', opt.overlap}]; end
 
 [ISC_obs, meta_isc] = movie.isc_per_subject(Y, iscArgs{:});   % [N x 1] or [N x T]
 

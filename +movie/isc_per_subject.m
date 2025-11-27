@@ -14,7 +14,7 @@ function [ISC, meta, ISCpair] = isc_per_subject(Y, varargin)
 %   'winLength'    : positive integer (default: [])
 %       Window length (samples) for time-resolved ISC. Required if timeResolved=true.
 %       If even is given, it will be incremented by 1 for symmetry.
-%   'edgeMode'     : 'shrink' (default) | 'reflect' | 'replicate'
+%   'edgeMode'     : 'replicate' (default) | 'reflect' | 'shrink'
 %       Edge handling for time-resolved mode.
 %           shrink    = “don’t invent data; accept shorter windows near edges”
 %           reflect   = “invent data by mirroring the signal”
@@ -55,7 +55,7 @@ end
 P = inputParser;
 P.addParameter('timeResolved', false, @(x)islogical(x)&&isscalar(x));
 P.addParameter('winLength',    [],    @(x)isempty(x) || (isscalar(x) && x>=2 && x==floor(x)));
-P.addParameter('edgeMode',     'shrink', @(s)ischar(s) || isstring(s));
+P.addParameter('edgeMode',     'replicate', @(s)ischar(s) || isstring(s));
 P.addParameter('pairMetric',   'corr', @(s) any(strcmpi(string(s),["corr","cov"])));
 P.addParameter('fisherZ',      true, @(x)islogical(x)&&isscalar(x));
 P.addParameter('pairwise',     false, @(x) isempty(x) || (islogical(x) && isscalar(x)));
@@ -68,10 +68,11 @@ opt.edgeMode   = lower(string(opt.edgeMode));
 opt.pairMetric = lower(string(opt.pairMetric));
 
 % Decide whether to compute pairwise matrices
-if isempty(opt.pairwise)
-    wantPair = (nargout >= 3) && ~opt.timeResolved;
-else
-    wantPair = (nargout >= 3) && opt.pairwise;
+wantPair = opt.pairwise && (nargout >= 3);
+% If pairwise + time-resolved -> overlap is required
+if wantPair && opt.timeResolved && isempty(opt.overlap)
+    error('isc_per_subject:overlapRequired', ...
+        'Overlap must be specified when computing pairwise matrices in time-resolved mode.');
 end
 
 meta = struct('T',T,'N',N, ...
